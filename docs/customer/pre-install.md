@@ -17,7 +17,7 @@ Install the product on `/opt`. That is the filesystem location for add-on softwa
 | `/opt` | The 1 TB data disk |
 | `/opt/oracle` | Oracle software. The database zip is unpacked in `/opt/oracle/oramedia`. |
 | `/opt/nokia/tnms` | TNMS software. The installer creates this path. |
-| `/opt/tnms-install` | Wizard script, properties file, zip files, and the unpacked installer. Mode `700`. |
+| `/opt/tnms-install` | Wizard script, properties file, zip files, and the unpacked installer. Mode `750`, group `azureuser`. |
 | `/nokia` | TNMS data. Bind mount from `/opt/tnms-data`. The installer requires this path. |
 | `/oradata` | Database files in `ora1`, `ora2`, and `ora3`. Bind mount from `/opt/oradata`. |
 | `/home` | Login account. Small volume on the OS disk. |
@@ -259,12 +259,12 @@ Empty output means `/opt` is not a mount. `/opt` is still a directory on the 8 G
 ```bash
 install -d -m 755 /opt/oracle /opt/nokia /opt/tnms-data /nokia /oradata
 install -d -m 755 /opt/oradata/ora1 /opt/oradata/ora2 /opt/oradata/ora3
-install -d -o root -g root -m 700 /opt/tnms-install /opt/tnms-install/resources
+install -d -o root -g azureuser -m 750 /opt/tnms-install /opt/tnms-install/resources
 mount --bind /opt/tnms-data /nokia
 mount --bind /opt/oradata /oradata
 ```
 
-Those commands print nothing. `/opt/tnms-install` is mode `700` because it will hold the properties file. The database passwords and the wizard log stay in `/root`.
+Those commands print nothing. `/opt/tnms-install` is mode `750` and group `azureuser`, so that SSH login can read the wizard files. The plaintext database passwords, the generated response file, and the wizard log stay in `/root` at mode `600`.
 
 **Confirm by running:**
 
@@ -397,14 +397,14 @@ Enforcing
 **Confirm by running:**
 
 ```bash
-stat -c '%a %n' /opt/tnms-install /opt/tnms-install/resources
+stat -c '%a %U %G %n' /opt/tnms-install /opt/tnms-install/resources
 ```
 
 **Expected output:**
 
 ```text
-700 /opt/tnms-install
-700 /opt/tnms-install/resources
+750 root azureuser /opt/tnms-install
+750 root azureuser /opt/tnms-install/resources
 ```
 
 Reboot, log in again, and run the five checks in this section a second time. The same mounts and the same swap file mean `/etc/fstab` is in effect.
@@ -441,7 +441,7 @@ lrwxrwxrwx. 1 azureuser azureuser 28 Oct  8 20:00 /home/azureuser/.vscode-server
 drwx------. 2 azureuser azureuser  6 Oct  8 20:00 /opt/azureuser/vscode-server
 ```
 
-The date and the link size follow the VM. Connect again as `azureuser`. New server files are written on `/opt`. Leave `/opt/tnms-install` mode `700` and owned by root. Put the five install files in `/tmp`, as `docs/customer/install-without-repo.md` describes.
+The date and the link size follow the VM. Connect again as `azureuser`. New server files are written on `/opt`. `/opt/tnms-install` stays mode `750`, owner root, group `azureuser`. Put the five install files in `/tmp`, as `docs/customer/install-without-repo.md` describes.
 
 ## 7. Next
 

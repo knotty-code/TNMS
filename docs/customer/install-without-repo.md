@@ -426,10 +426,10 @@ scp install-tnms-wizard.sh tnms-install.properties.in \
 On the server, as root:
 
 ```bash
-install -d -o root -g root -m 700 /opt/tnms-install /opt/tnms-install/resources
-install -o root -g root -m 700 /tmp/install-tnms-wizard.sh /opt/tnms-install/install-tnms-wizard.sh
-install -o root -g root -m 600 /tmp/tnms-install.properties.in /opt/tnms-install/tnms-install.properties.in
-install -o root -g root -m 644 \
+install -d -o root -g azureuser -m 750 /opt/tnms-install /opt/tnms-install/resources
+install -o root -g azureuser -m 740 /tmp/install-tnms-wizard.sh /opt/tnms-install/install-tnms-wizard.sh
+install -o root -g azureuser -m 640 /tmp/tnms-install.properties.in /opt/tnms-install/tnms-install.properties.in
+install -o root -g azureuser -m 640 \
   /tmp/LINUX.X64_193000_db_home_and_patches.zip \
   /tmp/TNMS_LUX_R9.1.0.593.0_1904_Prerequisites.zip \
   /tmp/TNMS_LUX_R9.1.0.593.0_1904.zip \
@@ -440,7 +440,24 @@ rm -f /tmp/install-tnms-wizard.sh /tmp/tnms-install.properties.in \
   /tmp/TNMS_LUX_R9.1.0.593.0_1904.zip
 ```
 
-`install` prints nothing. `rm` prints nothing. The `/tmp` copies are removed. The properties file remains only under `/opt/tnms-install`.
+`install` prints nothing. `rm` prints nothing. The `/tmp` copies are removed. The properties file remains only under `/opt/tnms-install`. Owner is root. Group is `azureuser`. The directory is mode `750`, the script is mode `740`, and `tnms-install.properties.in` is mode `640`. The SSH login can read the files. It cannot change them. Plaintext passwords stay in `/root`.
+
+When the files are already in place and VS Code reports `EACCES` on `tnms-install.properties.in`, the directory is still mode `700`. Set the group and mode in place:
+
+```bash
+chgrp azureuser /opt/tnms-install /opt/tnms-install/resources \
+  /opt/tnms-install/install-tnms-wizard.sh \
+  /opt/tnms-install/tnms-install.properties.in
+chmod 750 /opt/tnms-install /opt/tnms-install/resources
+chmod 740 /opt/tnms-install/install-tnms-wizard.sh
+chmod 640 /opt/tnms-install/tnms-install.properties.in
+if compgen -G '/opt/tnms-install/resources/*.zip' > /dev/null; then
+  chgrp azureuser /opt/tnms-install/resources/*.zip
+  chmod 640 /opt/tnms-install/resources/*.zip
+fi
+```
+
+`chgrp` and `chmod` print nothing. `compgen` prints nothing when no zip is present yet.
 
 **Confirm by running:**
 
@@ -453,9 +470,9 @@ ls -l /opt/tnms-install
 Both wizard names are listed, plus the `resources` directory. The modes are the check. Sizes and dates follow the files you copied. On RHEL the mode column ends with a dot.
 
 ```text
--rwx------. 1 root root <size> <date> install-tnms-wizard.sh
-drwx------. 2 root root <size> <date> resources
--rw-------. 1 root root <size> <date> tnms-install.properties.in
+-rwxr-----. 1 root azureuser <size> <date> install-tnms-wizard.sh
+drwxr-x---. 2 root azureuser <size> <date> resources
+-rw-r-----. 1 root azureuser <size> <date> tnms-install.properties.in
 ```
 
 **Confirm by running:**
