@@ -1,0 +1,139 @@
+# Thu Oct 08 03:26:21 UTC 2026
+# Replay feature output
+# ---------------------
+# This file was built by the Replay feature of InstallAnywhere.
+# It contains variables that were set by Panels, Consoles or Custom Code.
+
+
+
+#Installation Package
+#--------------------
+CHOSEN_INSTALL_SET=Server+NetServer
+
+#Server Preparation: Transport Controller
+#----------------------------------------
+ENABLE_SDN_CONNECTION=0
+SDN_IP_ADDRESS=
+TRANSPORT_CONT_PORT=12443
+TRANSPORT_CONT_GATEWAY_PORT=12351
+
+#Server Preparation: Hardware Configuration
+#------------------------------------------
+HW_LARGE_CONFIG=0
+HW_MEDIUM_CONFIG=0
+HW_SMALL_PLUS_CONFIG=1
+HW_TINY_CONFIG=0
+
+#Server Preparation: Customization
+#---------------------------------
+USERS_SELECTED=0
+DIRECTORIES_SELECTED=0
+
+#Network Interface Selection Panel
+#---------------------------------
+SERVER_FRONTEND_IP=@TNMS_IP@
+SERVER_BACKEND_IP=@TNMS_IP@
+MEDIATION_NORTH_IP=@TNMS_IP@
+MEDIATION_SOUTH_IP=@TNMS_IP@
+CLIENT_CONNECT_ADDRESS=@TNMS_IP@
+FESERVER_FRONTEND_IP=@TNMS_IP@
+FESERVER_BACKEND_IP=@TNMS_IP@
+
+#Server Preparation: Database
+#----------------------------
+DATABASE_MIGRATION_NO=1
+DATABASE_MIGRATION=0
+
+#Oracle Database
+#---------------
+DB_HOST=127.0.0.1
+DB_PORT=1521
+DB_USER=tnmsdba
+DB_PWD=47112E232C303F2D48372E2F4E2C1037104F3D2C
+DB_NAME=TNMS
+DB_SYSPWD=4F193E19001E142D4E194B20152C3E2C1B4F3D2C
+DB_SYSUSER=sys
+DB_DIR=/opt/oracle/product/19c/dbhome_1
+localDB=true
+
+#Advisory Message Panel
+#----------------------
+SHOW_ADVISORY_MESSAGE=false
+TEXT_ADVISORY_MESSAGE=
+
+#AddComponentsPanel
+#------------------
+Ethernet_Manager_TO_MIGRATE=0
+Ethernet_Manager_TO_INSTALL=1
+ASON_Manager_TO_MIGRATE=0
+ASON_Manager_TO_INSTALL=1
+Optical_Manager_TO_MIGRATE=0
+Optical_Manager_TO_INSTALL=1
+ZTC_Manager_TO_MIGRATE=0
+ZTC_Manager_TO_INSTALL=0
+Optical_Spectrum_Insight_TO_MIGRATE=0
+Optical_Spectrum_Insight_TO_INSTALL=1
+NEW_MANAGERS=ASON Manager;Ethernet Manager;Optical Manager;Optical Spectrum Insight;
+ALL_MANAGERS=Ethernet Manager=1,ASON Manager=1,Optical Manager=1,ZTC Manager=0,Optical Spectrum Insight=1
+
+#TNMS FE IPs List
+#----------------
+TNMS_FE_IPS_LIST=
+
+#NorthboundInterfaces Panel
+#--------------------------
+NTI_TO_INSTALL=0
+NTI_WM_LEGACY_OPTION=0
+NTI_TO_MIGRATE=0
+SNMP_NBI=0
+SNMP_NBI_TO_MIGRATE=0
+REST_NBI_TO_INSTALL=0
+REST_NBI_TO_MIGRATE=0
+ALL_NBIS=NTI=0,NTI_WM_LEGACY_OPTION=0,SNMP_NBI=0,REST_NBI=0
+
+#AddNetwork ElementsPanel
+#------------------------
+EM-GM_TO_INSTALL=
+EM-MVM_TO_INSTALL=Generic SNMP;
+UNO_TO_INSTALL=
+EM-NMS_TO_INSTALL=
+EM-IntelligentPluggableManager_TO_INSTALL=
+Transcend-REST-Channel_TO_INSTALL=
+EM-WaveSuite-Channel_TO_INSTALL=
+TOTAL_NODES_TO_ADD=EM-GM:|EM-MVM:Generic SNMP;|UNO:|EM-NMS:|EM-IntelligentPluggableManager:|Transcend-REST-Channel:|EM-WaveSuite-Channel:|
+
+#Install
+#-------
+-fileOverwrite_/server.test=Yes
+-fileOverwrite_/mediation.test=Yes
+-fileOverwrite_/nokia/tnms/var/server/portal/tnms/TNMS.exe=Yes
+-fileOverwrite_/nokia/tnms/trace/system/install/createUsersAndGroups.log=Yes
+-fileOverwrite_/opt/nokia/tnms/install/bin/clean_oracle_crontab.pl=Yes
+-fileOverwrite_/opt/nokia/tnms/install/lib/runSqlScript.jar=Yes
+-fileOverwrite_/opt/nokia/tnms/install/lib/sqltool.jar=Yes
+-fileOverwrite_/opt/nokia/tnms/install/lib/ojdbc8.jar=Yes
+-fileOverwrite_/opt/nokia/tnms/install/lib/ojdbc.jar=Yes
+-fileOverwrite_/opt/nokia/tnms/install/lib/profile.jar=Yes
+-fileOverwrite_/opt/nokia/tnms/install/installer_variables.properties=Yes
+-fileOverwrite_/opt/nokia/tnms/install/installer_replace_files.conf=Yes
+-fileOverwrite_/opt/nokia/tnms/install/sql/migration/DBBackup/backup_tnms_schema.sql=Yes
+-fileOverwrite_/opt/nokia/tnms/install/sql/migration/DBBackup/backup_nm_schema.sql=Yes
+-fileOverwrite_/opt/nokia/tnms/install/sql/migration/DBBackup/backup_nmr_schema.sql=Yes
+-fileOverwrite_/opt/nokia/tnms/install/sql/migration/DBBackup/backup_dna_schema.sql=Yes
+-fileOverwrite_/opt/nokia/tnms/install/sql/migration/DBBackup/backup_sdn_schema.sql=Yes
+-fileOverwrite_/opt/nokia/tnms/install/sql/migration/DBBackup/pre_backup_tnms_schema.sql=Yes
+-fileOverwrite_/opt/nokia/tnms/install/sql/migration/DBBackup/pre_backup_nmr_schema.sql=Yes
+-fileOverwrite_/opt/nokia/tnms/install/sql/migration/DBBackup/pre_backup_nm_schema.sql=Yes
+-fileOverwrite_/opt/nokia/tnms/install/sql/migration/DBBackup/pre_backup_dna_schema.sql=Yes
+-fileOverwrite_/opt/nokia/tnms/install/sql/migration/DBBackup/pre_backup_sdn_schema.sql=Yes
+-fileOverwrite_/opt/nokia/tnms/server/bin/changepassword/tnmsPasswordValidator.jar=Yes
+-fileOverwrite_/opt/nokia/tnms/system/Uninstall/Uninstall.lax=Yes
+
+#Registered Variables
+#--------------------
+ORACLE_USER=oracle
+DBA_GROUP=dba
+INSTALLER_UI=silent
+NTI_WM_LEGACY=false
+RPP_SERVICE_MODE=IQNOS
+UPGRADE=false

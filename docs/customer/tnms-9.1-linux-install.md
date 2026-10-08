@@ -375,7 +375,7 @@ chmod 744 ./TNMS.bin
 ./TNMS.bin
 ```
 
-This build rejects `-i console` (`Installer User Interface Mode Not Supported`). The install is an SSH session to a VM, so run the GUI on the Xvfb display in [install-log.md](install-log.md).
+This build rejects `-i console` (`Installer User Interface Mode Not Supported`). The install is an SSH session to a VM. [install-log.md](install-log.md) step 9 runs `scripts/install-tnms-wizard.sh`, which replays the recorded choices with `INSTALLER_UI=silent`.
 
 InstallAnywhere measures free space on `/`, even when `/opt/nokia/tnms` is a bind mount on a larger disk. `/` needs about 5 GB free before **Install** is clicked. On this host `rootlv` was extended from 2 GB to 8 GB.
 

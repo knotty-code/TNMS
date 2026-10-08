@@ -730,196 +730,54 @@ The script applies the 19.7 patches that are inside the Oracle zip: `30869156` (
 
 ## 8. Memory check before the TNMS wizard
 
-Small Plus stays on its own page until `lsmem --summary` reports at least 32G. This host has 16G.
-
-**This host.** Install the wrapper before starting `TNMS.bin`. Remove it in step 10 after the wizard process has exited.
-
-```bash
-mv /usr/bin/lsmem /usr/bin/lsmem.real
-cat > /usr/bin/lsmem << 'EOF'
-#!/bin/bash
-if [[ "$*" == *summary* ]]; then
-  echo "Memory block size:       128M"
-  echo "Total online memory:      32G"
-  echo "Total offline memory:      0B"
-  exit 0
-fi
-exec /usr/bin/lsmem.real "$@"
-EOF
-chmod 755 /usr/bin/lsmem
-```
-
-`mv`, `cat`, and `chmod` print nothing.
-
-**Confirm by running:**
-
-```bash
-lsmem --summary
-```
-
-**Expected output:**
-
-```text
-Memory block size:       128M
-Total online memory:      32G
-Total offline memory:      0B
-```
-
-**Confirm by running:**
-
-```bash
-file /usr/bin/lsmem /usr/bin/lsmem.real
-```
-
-**Expected output:**
-
-```text
-/usr/bin/lsmem:      Bourne-Again shell script, ASCII text executable
-/usr/bin/lsmem.real: ELF 64-bit LSB shared object, x86-64
-```
-
-On a server where `lsmem --summary` already reports 32G or more, skip this step. That server's `lsmem` line from `file` stays `ELF 64-bit`.
+Small Plus refuses to continue until `lsmem --summary` reports at least 32G. This host has 16G. Do not edit `/usr/bin/lsmem` by hand. The step 9 script installs that wrapper for the duration of `TNMS.bin` and puts the real command back before it exits. On a server that already reports 32G or more, the script leaves `lsmem` alone.
 
 ## 9. Install TNMS Server and Mediation
 
-`TNMS.bin` rejects `-i console` (`Installer User Interface Mode Not Supported`). The media does not ship a silent response file. Run the GUI over SSH. The SSH session has no monitor, so the GUI runs on a virtual screen, Xvfb. `-r` writes a response file that contains the database passwords. Leave `/root/tnms-install.properties` on the server, and keep it out of git.
+`TNMS.bin` rejects `-i console` (`Installer User Interface Mode Not Supported`). The recorded run wrote a response file, and that file sets `INSTALLER_UI=silent`. One script replays those choices. There is no second SSH session and no screenshot.
+
+The script is `scripts/install-tnms-wizard.sh` in this repository. It reads `SYS_PASSWORD` and `TNMSDBA_PASSWORD` from `/root/tnms-db-credentials`, writes the server IPv4 into the response file, and runs `TNMS.bin -f /root/tnms-install.properties`. On a host with less than 32 GB it installs the `lsmem` wrapper for that run and removes the wrapper before it exits. It refuses to start when `/opt/nokia/tnms/server` already exists.
+
+Run it as root, in the same SSH session. On this host the repository is `/home/azureuser/TNMS`:
 
 ```bash
-dnf -y install xorg-x11-server-Xvfb dejavu-sans-fonts
+/home/azureuser/TNMS/scripts/install-tnms-wizard.sh
 ```
+
+The command prints the address it wrote, then the installer log. The run takes about the same time as the wizard on this host, which was 02:59 to 03:26 UTC.
 
 **Expected output:**
 
-The command ends with:
+The last lines are:
 
 ```text
-Complete!
+TNMS wizard finished. Installer exit <n>. Product files are present, scs_daemon is enabled, and configure scripts exited 0.
 ```
 
-```bash
-mkdir -p /tmp/tnms-gui
-chmod 1777 /tmp/tnms-gui
-```
-
-Those commands print nothing.
-
-```bash
-Xvfb :99 -screen 0 1400x900x24 -ac +extension GLX +render -noreset >/tmp/tnms-gui/xvfb.log 2>&1 &
-```
-
-The `&` returns a job number and leaves Xvfb running.
-
-```bash
-export DISPLAY=:99
-export LANG=en_US.UTF-8
-```
-
-Those commands print nothing.
-
-**Open a second SSH session before the next command.** `./TNMS.bin` does not return until the wizard exits. The SSH window that starts it sits there with no prompt. From the workstation, open a new SSH connection to this same server and log in as root. That new connection is the second shell. Leave both connections open. Do not type in the first one, and do not close it. Every check and every screenshot below runs in the second shell. Keep a third window on the workstation, a terminal that is not logged into the server. That third window is only for downloading each picture.
-
-```bash
-cd /home/tnms-layout/installer/TNMS_Installer
-./TNMS.bin -i gui -r /root/tnms-install.properties -tempdir /tmp/tnms-gui
-```
-
-Run that command in the first SSH session. The installer window title is `TNMS 9.1.0.593.0 Installer`. The prompt in that session does not come back until the wizard exits.
-
-**Confirm by running,** in the second SSH session, before answering screens:
-
-```bash
-ps -C Xvfb -o args=
-```
-
-**Expected output:**
+On this 19.7 database the line above that is:
 
 ```text
-Xvfb :99 -screen 0 1400x900x24 -ac +extension GLX +render -noreset
+Known SQL error kept: ORA-02065 on _bug33046179_kqr_hot_copy_sleep_limit
 ```
 
-This command does not open the installer. It prints the command line of the virtual screen, with no column heading. Read the line as follows:
+`<n>` is the installer exit code. The finished line is the check, including when `<n>` is not 0. A line that says `TNMS wizard failed` means stop. Read `/root/tnms-wizard.log`. Do not start the script a second time until that failure is understood.
 
-- `Xvfb` is the virtual screen. It is a screen held in memory. No monitor is attached to it.
-- `:99` is the name of that screen. `export DISPLAY=:99` is the line that sent the installer there. The installer window is drawn on `:99`.
-- `-screen 0 1400x900x24` is one screen, 1400 by 900 pixels, 24-bit color. The wizard fits inside that rectangle.
-- `-ac` lets another program on this server read the screen. That is what makes the screenshot command below work.
-- A line that matches means the screen is up. The shell redirection `>/tmp/tnms-gui/xvfb.log` and the `&` are absent here. Those belong to the shell that started Xvfb, and they are not part of the process command line.
+The script selects the same choices this host used:
 
-Both SSH sessions show only text. The wizard is a picture on display `:99`. You see a page by saving that picture in the second SSH session, downloading the file to the workstation, and opening the file there. The numbered list below is the questions. The picture tells you which number you are on.
-
-If `ps -C Xvfb -o args=` prints nothing, the virtual screen is not running. Start Xvfb again before `./TNMS.bin`.
-
-Install the picture program once. In the second SSH session:
-
-```bash
-dnf -y install ImageMagick
-```
-
-**Expected output:**
-
-The command ends with:
-
-```text
-Complete!
-```
-
-`dnf` installs `import`. It does not take a picture. Do not run `dnf` again.
-
-**For every wizard page, use these three windows in this order.**
-
-1. Second SSH session. Save the page and let the workstation read the file:
-
-```bash
-import -window root -display :99 /tmp/tnms-gui/screen.png
-chmod 644 /tmp/tnms-gui/screen.png
-```
-
-Both commands print nothing.
-
-**Confirm by running,** in the second SSH session:
-
-```bash
-ls -l /tmp/tnms-gui/screen.png
-```
-
-**Expected output:**
-
-The line includes `-rw-r--r--` and `/tmp/tnms-gui/screen.png`. The size is not `0`.
-
-2. Workstation terminal. This is the third window. It is on your computer, and it is not logged into the server. If the prompt is a prompt on the server, this is the wrong window. Download the picture. Use the site admin name and the site address. On this host:
-
-```bash
-scp azureuser@172.16.0.4:/tmp/tnms-gui/screen.png .
-```
-
-**Expected output:**
-
-The transfer reaches `100%`. The workstation directory where you ran `scp` now contains `screen.png`. Each download replaces that file. Close the old picture before you open the new one, or the viewer can keep showing the previous page.
-
-3. On the workstation, open `screen.png` in an image viewer. The picture is one wizard page. The title is `TNMS 9.1.0.593.0 Installer`. Read the words on the page. Find that same page in the numbered list below. The text under that number is the required answer.
-
-Clicking the downloaded picture does nothing. The picture is only how you see the page. On this host the click or the typed value was sent with `xdotool` from the second SSH session, with `DISPLAY=:99`. The first SSH session stays inside `./TNMS.bin` and is not where answers are typed.
-
-After the answer, start again at action 1. Download the new picture and open it. The new picture must show the next page before you use the next number. If it shows the same page, the answer did not land. Send the answer again, then take another picture.
-
-Stop when the first SSH session returns to a shell prompt.
-
-The pages, in order:
-
-1. License. Accept the terms.
-2. PDT warning (`Check for available PDTs`, folder `TNMS_Installer/PUs`). Dismiss it when `PUs/` is empty.
-3. Installation package. **TNMS Server and Mediation**.
-4. Transport Controller. Leave it unchecked. Ports 12443 and 12351 stay unused.
-5. Hardware. **Small Plus**. The page opens on Medium.
-6. Customization. Leave **Users And Groups** and **Deployment Directories** unchecked. The defaults are user `tnms`, group `tnms`, SFTP user `tnms_sftp`, Oracle user `oracle`, DBA group `dba`, install directory `/opt/nokia/tnms`, data directory `/nokia/tnms`.
-7. Database. **New**.
-8. Connection. Host `127.0.0.1`, port `1521`, user `tnmsdba`, SID `TNMS`, Oracle home `/opt/oracle/product/19c/dbhome_1`. The password field labeled for user `sys` is `TnZT5hgW8Zwsp79`. The `tnmsdba` password is `Tnc25xQ36XBUa9`.
-9. Advisory message. Leave it disabled.
-10. Managers. Check Ethernet Manager, ASON Manager, Optical Manager, and Optical Spectrum Insight. Leave ZTC Manager unchecked.
-11. Frontend servers. Add none.
-12. Northbound interfaces. Check none.
-13. Network elements. Under EM-MVM, check Generic SNMP only.
-14. Summary. Confirm the rows below, then **Install**.
+| Choice | Value |
+| --- | --- |
+| Package | TNMS Server and Mediation (`Server+NetServer`) |
+| Transport Controller | off. Ports 12443 and 12351 stay unused |
+| Hardware | Small Plus |
+| Users, groups, directories | the product defaults |
+| Database | New. Host `127.0.0.1`, port `1521`, user `tnmsdba`, SID `TNMS`, Oracle home `/opt/oracle/product/19c/dbhome_1` |
+| `sys` password | `SYS_PASSWORD` from step 6 |
+| `tnmsdba` password | `TNMSDBA_PASSWORD` from step 6 |
+| Advisory message | off |
+| Managers | Ethernet, ASON, Optical, Optical Spectrum Insight. ZTC off |
+| Frontend servers | none |
+| Northbound interfaces | none |
+| Network elements | EM-MVM / Generic SNMP only |
 
 | Summary row | Value |
 | --- | --- |
@@ -935,19 +793,32 @@ The pages, in order:
 | Managers | Ethernet, ASON, Optical, Optical Spectrum Insight |
 | Network elements | EM-MVM / Generic SNMP |
 
-A picture can also show a dialog that is not one of those 14 pages. Use the same three windows for it: save, download, open, then answer. If a firewall warning appears, firewalld is still running. Stop it and continue. If the wizard says a user or group already exists, stop and remove only the name it prints. Leave `oracle` and `orabackup` in place.
+`/` must have about 4531 MB free before the script starts. The script stops when it does not. Step 4 is what clears that. On this host the first GUI attempt reported 1,959.78 MB free and stopped; after `rootlv` was 8 GB the copy ran.
 
-The copy on this host then stopped on **Not Enough Disk Space** (4,530.80 MB required on `/opt/nokia/tnms`, 1,959.78 MB reported). That number is the free space of `/`. Step 4 is what clears it. After growing `rootlv` to 8 GB the next page was **Enough Disk Space**. **Install** was clicked again and the copy started.
-
-When the progress reaches the end, a dialog titled **Installation fatal errors** says the installation finished with serious errors. Click **OK**. The result page names `Error in db_setup.sh`. Click **Done**. Done is what runs `configure_system.sh`. On this host that script exited 0 and registered `scs_daemon.service`.
-
-That error is one statement in `/nokia/tnms/trace/system/install/sql/db_setup_TNMS_*.log`:
+The script keeps the install when the only SQL error is this statement in `/nokia/tnms/trace/system/install/sql/db_setup_TNMS_*.log`:
 
 ```text
 alter system set "_bug33046179_kqr_hot_copy_sleep_limit"=0
 ```
 
-Oracle 19.7 returns `ORA-02065: illegal option for ALTER SYSTEM`. The SQL tool continues, and the component creation summary (`/tmp/tnms-gui/ossnms/sql/creation_summary_TNMSDBA_*.log` when the wizard temp dir is `/tmp/tnms-gui`) shows each component `OK`. Keep the install when that is the only SQL error.
+Oracle 19.7 returns `ORA-02065: illegal option for ALTER SYSTEM`. The SQL tool continues, and the component creation summary shows each component `OK`. The configure log `/nokia/tnms/trace/system/install/system_configure.log` ends with `Product configuration ended`, and each after-script exits 0, including `95_scs_service.sh`.
+
+To see the response file without starting the installer:
+
+```bash
+/home/azureuser/TNMS/scripts/install-tnms-wizard.sh --dry-run
+```
+
+**Expected output:**
+
+```text
+Response file: /tmp/tnms-install.properties.dry-run
+Server IPv4 written into the response file: 172.16.0.4
+lsmem wrapper would be installed for this run and removed when the script exits.
+TNMS.bin was not started.
+```
+
+The address and the wrapper line follow the server. `TNMS.bin was not started.` is the check that the dry run did not install anything.
 
 ```bash
 . /etc/profile.d/ossnms.sh
@@ -1008,7 +879,7 @@ TNMS_FILES_OK
 
 ## 10. Put lsmem back
 
-Run this after the `TNMS.bin` process has exited, and only if step 8 installed the wrapper.
+The step 9 script removes its wrapper before it exits. Confirm the real command is back. If `/usr/bin/lsmem.real` still exists, the script stopped before that restore. Run this only in that case:
 
 ```bash
 mv -f /usr/bin/lsmem.real /usr/bin/lsmem
