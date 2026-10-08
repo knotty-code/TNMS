@@ -6,7 +6,7 @@ One machine. Small Plus. TNMS Server and Mediation together. New database.
 
 The passwords used on this host are in the table below. Write those same values into `/root/tnms-db-credentials` (mode 600). A step headed **This host** applies when the fresh server matches the condition in that step.
 
-A line that says **Confirm by running** is a separate command. Run that command, and compare its output with the block under it. A work command that prints nothing is finished when the shell prompt returns. Names and addresses below are this host. Sizes move with the disk. Replace `TNMS` and `172.16.0.4` with the site values.
+A line that says **Confirm by running** is a separate command. Run that command. The next **Expected output** block is what that command should print. Compare the two. A work command that prints nothing is finished when the shell prompt returns. Names and addresses below are this host. Sizes move with the disk. Replace `TNMS` and `172.16.0.4` with the site values.
 
 The longer manual notes are in [tnms-9.1-linux-install.md](tnms-9.1-linux-install.md).
 
@@ -73,6 +73,8 @@ That command prints nothing.
 hostnamectl status
 ```
 
+**Expected output:**
+
 The output includes this line:
 
 ```text
@@ -90,6 +92,8 @@ That command prints nothing.
 ```bash
 locale
 ```
+
+**Expected output:**
 
 The output includes this line:
 
@@ -111,6 +115,8 @@ LANG=en_US.UTF-8
 hostname --fqdn
 ```
 
+**Expected output:**
+
 ```text
 TNMS.vmefr40i5gquree1lezspcyb0c.gx.internal.cloudapp.net
 ```
@@ -121,6 +127,8 @@ TNMS.vmefr40i5gquree1lezspcyb0c.gx.internal.cloudapp.net
 getent hosts TNMS
 ```
 
+**Expected output:**
+
 ```text
 172.16.0.4      TNMS.vmefr40i5gquree1lezspcyb0c.gx.internal.cloudapp.net TNMS
 ```
@@ -130,6 +138,8 @@ getent hosts TNMS
 ```bash
 nisdomainname
 ```
+
+**Expected output:**
 
 The command exits 1. That exit code is the finished state. The output is:
 
@@ -143,6 +153,8 @@ nisdomainname: Local domain name not set
 getenforce
 ```
 
+**Expected output:**
+
 ```text
 Enforcing
 ```
@@ -152,6 +164,8 @@ Enforcing
 ```bash
 dnf -y install https://dl.fedoraproject.org/pub/epel/epel-release-latest-8.noarch.rpm
 ```
+
+**Expected output:**
 
 The command ends with:
 
@@ -165,6 +179,8 @@ dnf -y install attr bc elfutils-libelf-devel fontconfig-devel gcc gcc-c++ \
   unzip perl binutils glibc-devel
 ```
 
+**Expected output:**
+
 The command ends with:
 
 ```text
@@ -176,6 +192,8 @@ Complete!
 ```bash
 rpm -q epel-release jemalloc elfutils-libelf-devel fontconfig-devel libnsl make sysstat libXtst unzip
 ```
+
+**Expected output:**
 
 One line per package, and none of them says `is not installed`. On this host the `jemalloc` line was `jemalloc-5.2.1-3.el8.x86_64`. The Oracle installer checks `elfutils-libelf-devel`, `fontconfig-devel`, `libnsl`, `make`, `sysstat`, and `libXtst`.
 
@@ -193,6 +211,8 @@ vm.min_free_kbytes = 1048576
 ```bash
 sysctl --system
 ```
+
+**Expected output:**
 
 The output includes the file name and the four settings:
 
@@ -214,6 +234,8 @@ That command prints nothing.
 systemctl disable firewalld
 ```
 
+**Expected output:**
+
 ```text
 Removed /etc/systemd/system/multi-user.target.wants/firewalld.service.
 ```
@@ -223,6 +245,8 @@ Removed /etc/systemd/system/multi-user.target.wants/firewalld.service.
 ```bash
 systemctl is-enabled firewalld
 ```
+
+**Expected output:**
 
 ```text
 disabled
@@ -234,6 +258,8 @@ disabled
 systemctl is-active firewalld
 ```
 
+**Expected output:**
+
 ```text
 inactive
 ```
@@ -243,6 +269,8 @@ inactive
 ```bash
 systemctl is-active chronyd
 ```
+
+**Expected output:**
 
 ```text
 active
@@ -267,6 +295,8 @@ Check the three filesystems before changing anything. Each check is its own comm
 df -h / /tmp
 ```
 
+**Expected output:**
+
 Read the `Avail` column. `/` needs at least 8 GB free. `/tmp` needs at least 16 GB free. On this host, before the changes below, `/` was 2 GB and `/tmp` was 2 GB. After those changes the same command included:
 
 ```text
@@ -280,6 +310,8 @@ Read the `Avail` column. `/` needs at least 8 GB free. `/tmp` needs at least 16 
 findmnt -no OPTIONS /tmp
 ```
 
+**Expected output:**
+
 The word `noexec` is absent. On this host the line was:
 
 ```text
@@ -292,6 +324,8 @@ rw,relatime,seclabel,attr2,inode64,logbufs=8,logbsize=32k,noquota
 swapon --show
 ```
 
+**Expected output:**
+
 The command prints nothing when the server has no swap yet. This host had no swap before the file created below. After that file, the same command prints a line for `/home/tnms-layout/swapfile` with size `18G`. The full line is in the post-change confirm later in this step.
 
 **This host.** `/` was a 2 GB logical volume and the 1 TB disk was `/home`. These are the commands that made the layout the installers accepted. Skip a command when that filesystem is already large enough. The volume names were `/dev/rootvg/rootlv` and `/dev/rootvg/tmplv`.
@@ -299,6 +333,8 @@ The command prints nothing when the server has no swap yet. This host had no swa
 ```bash
 lvextend -r -L 8G /dev/rootvg/rootlv
 ```
+
+**Expected output:**
 
 The output includes:
 
@@ -309,6 +345,8 @@ successfully resized
 ```bash
 lvextend -r -L 16G /dev/rootvg/tmplv
 ```
+
+**Expected output:**
 
 The output includes `successfully resized` again.
 
@@ -339,6 +377,8 @@ That command prints nothing.
 ```bash
 mkswap /home/tnms-layout/swapfile
 ```
+
+**Expected output:**
 
 The output includes:
 
@@ -380,6 +420,8 @@ That command prints nothing.
 swapon --show
 ```
 
+**Expected output:**
+
 ```text
 NAME                       TYPE SIZE USED PRIO
 /home/tnms-layout/swapfile file  18G  4.8G   -2
@@ -392,6 +434,8 @@ The `USED` column moves. `SIZE` stays `18G`.
 ```bash
 df -h / /tmp /opt/oracle /opt/nokia /nokia /oradata
 ```
+
+**Expected output:**
 
 The output includes these lines. Used and available sizes move. `/` is about 8G with several GB free, `/tmp` is 16G, and the four product paths are on the large filesystem.
 
@@ -409,6 +453,8 @@ The output includes these lines. Used and available sizes move. `/` is about 8G 
 ```bash
 findmnt /opt/oracle /opt/nokia /nokia /oradata
 ```
+
+**Expected output:**
 
 Each of the four paths is listed, and each line includes `bind`.
 
@@ -430,6 +476,8 @@ That assignment prints nothing. The three tests below use it. An `unzip -t` that
 unzip -t "$MEDIA/LINUX.X64_193000_db_home_and_patches (1).zip"
 ```
 
+**Expected output:**
+
 The last line is:
 
 ```text
@@ -442,6 +490,8 @@ No errors detected in compressed data of /home/azureuser/TNMS/resources/LINUX.X6
 unzip -t "$MEDIA/TNMS_LUX_R9.1.0.593.0_1904.zip"
 ```
 
+**Expected output:**
+
 The last line is:
 
 ```text
@@ -453,6 +503,8 @@ No errors detected in compressed data of /home/azureuser/TNMS/resources/TNMS_LUX
 ```bash
 unzip -t "$MEDIA/TNMS_LUX_R9.1.0.593.0_1904_Prerequisites.zip"
 ```
+
+**Expected output:**
 
 The last line is:
 
@@ -484,6 +536,8 @@ Those commands print nothing.
 ls /opt/oracle/oramedia
 ```
 
+**Expected output:**
+
 ```text
 LINUX.X64_193000_db_home.zip
 p30869156_190000_Linux-x86-64.zip
@@ -497,6 +551,8 @@ p35775632_190000_Linux-x86-64.zip
 ls -l /home/tnms-layout/installer/TNMS_Installer/TNMS.bin
 ```
 
+**Expected output:**
+
 The permission field is `-rwxr--r--` (mode `744`).
 
 **Confirm by running:**
@@ -504,6 +560,8 @@ The permission field is `-rwxr--r--` (mode `744`).
 ```bash
 ls -l /home/tnms-layout/prereq/TNMS_Prerequisites/Oracle/installation/installation.sh
 ```
+
+**Expected output:**
 
 The permission field starts with `-rwx`. The file is executable.
 
@@ -533,6 +591,8 @@ TNMSDBA_PASSWORD=Tnc25xQ36XBUa9
 stat -c '%a %U:%G' /root/tnms-db-credentials
 ```
 
+**Expected output:**
+
 ```text
 600 root:root
 ```
@@ -542,6 +602,8 @@ stat -c '%a %U:%G' /root/tnms-db-credentials
 ```bash
 grep -E '^[A-Z_]+=' /root/tnms-db-credentials
 ```
+
+**Expected output:**
 
 ```text
 SYS_PASSWORD=TnZT5hgW8Zwsp79
@@ -570,6 +632,8 @@ cd /home/tnms-layout/prereq/TNMS_Prerequisites/Oracle/installation
   -systempwd="$SYSTEM_PASSWORD"
 ```
 
+**Expected output:**
+
 While it runs, the terminal prints a long log. On a 16 GB server that log includes these lines, in this order:
 
 ```text
@@ -590,6 +654,8 @@ Final status of the execution: Success
 echo $?
 ```
 
+**Expected output:**
+
 ```text
 0
 ```
@@ -601,6 +667,8 @@ The log file keeps the same lines. Its name includes a timestamp.
 ```bash
 grep -F 'Final status of the execution:' /home/oracle/ossnms_installation_log/oracle_installation_*.log
 ```
+
+**Expected output:**
 
 ```text
 Final status of the execution: Success
@@ -614,6 +682,8 @@ If more than one log exists, each matching line is printed. The newest file is t
 grep -E 'Total memory:|Required memory:|Total swap:|Required swap:|Error checking requirements\.|nr_hugepages' /home/oracle/ossnms_installation_log/oracle_installation_*.log
 ```
 
+**Expected output:**
+
 The output includes the memory, swap, and huge-page lines shown above, in that order.
 
 **Confirm by running:**
@@ -621,6 +691,8 @@ The output includes the memory, swap, and huge-page lines shown above, in that o
 ```bash
 grep TNMS /etc/oratab
 ```
+
+**Expected output:**
 
 ```text
 TNMS:/opt/oracle/product/19c/dbhome_1:Y
@@ -632,6 +704,8 @@ TNMS:/opt/oracle/product/19c/dbhome_1:Y
 ss -ltn | grep 1521
 ```
 
+**Expected output:**
+
 ```text
 LISTEN 0      400                0.0.0.0:1521       0.0.0.0:*
 ```
@@ -641,6 +715,8 @@ LISTEN 0      400                0.0.0.0:1521       0.0.0.0:*
 ```bash
 grep '^LISNER' /opt/oracle/product/19c/dbhome_1/network/admin/listener.ora
 ```
+
+**Expected output:**
 
 ```text
 LISNER =
@@ -681,6 +757,8 @@ chmod 755 /usr/bin/lsmem
 lsmem --summary
 ```
 
+**Expected output:**
+
 ```text
 Memory block size:       128M
 Total online memory:      32G
@@ -692,6 +770,8 @@ Total offline memory:      0B
 ```bash
 file /usr/bin/lsmem /usr/bin/lsmem.real
 ```
+
+**Expected output:**
 
 ```text
 /usr/bin/lsmem:      Bourne-Again shell script, ASCII text executable
@@ -716,6 +796,8 @@ cd /home/tnms-layout/installer/TNMS_Installer
 ```bash
 dnf -y install xorg-x11-server-Xvfb dejavu-sans-fonts
 ```
+
+**Expected output:**
 
 The command ends with:
 
@@ -756,6 +838,8 @@ The installer window title is `TNMS 9.1.0.593.0 Installer`. The command does not
 ps -C Xvfb -o args=
 ```
 
+**Expected output:**
+
 ```text
 Xvfb :99 -screen 0 1400x900x24 -ac +extension GLX +render -noreset
 ```
@@ -775,6 +859,8 @@ Look at the current page from the second shell:
 ```bash
 dnf -y install ImageMagick
 ```
+
+**Expected output:**
 
 The command ends with:
 
@@ -849,6 +935,8 @@ The leading dot is required. That command prints nothing.
 echo $?
 ```
 
+**Expected output:**
+
 ```text
 0
 ```
@@ -858,6 +946,8 @@ echo $?
 ```bash
 getent passwd tnms tnms_sftp
 ```
+
+**Expected output:**
 
 ```text
 tnms:x:<uid>:<gid>::/opt/nokia/tnms:/bin/bash
@@ -872,6 +962,8 @@ The numeric ids differ by server. The homes and the `tnms` shell are the check. 
 systemctl is-enabled scs_daemon
 ```
 
+**Expected output:**
+
 ```text
 enabled
 ```
@@ -881,6 +973,8 @@ enabled
 ```bash
 test -d /opt/nokia/tnms/server && test -d /nokia/tnms && echo TNMS_FILES_OK
 ```
+
+**Expected output:**
 
 ```text
 TNMS_FILES_OK
@@ -902,6 +996,8 @@ That command prints nothing.
 lsmem --summary
 ```
 
+**Expected output:**
+
 ```text
 Memory block size:       128M
 Total online memory:      16G
@@ -914,6 +1010,8 @@ Total offline memory:      0B
 file /usr/bin/lsmem
 ```
 
+**Expected output:**
+
 ```text
 /usr/bin/lsmem: ELF 64-bit LSB shared object, x86-64, version 1 (SYSV), dynamically linked, interpreter /lib64/ld-linux-x86-64.so.2, for GNU/Linux 3.2.0, BuildID[sha1]=aa4bf18057211264f0eac86aa499369a1081724f, stripped
 ```
@@ -925,6 +1023,8 @@ file /usr/bin/lsmem
 ```bash
 /usr/bin/passwd tnms_sftp
 ```
+
+**Expected output:**
 
 The command asks for the new password twice. Type `Tsvb5-Xe8ou3wR9` both times. It ends with:
 
@@ -952,6 +1052,8 @@ Those commands print nothing.
 grep -E '^[A-Z_]+=' /root/tnms-db-credentials
 ```
 
+**Expected output:**
+
 ```text
 SYS_PASSWORD=TnZT5hgW8Zwsp79
 SYSTEM_PASSWORD=TnZT5hgW8Zwsp79
@@ -965,6 +1067,8 @@ TNMS_SFTP_PASSWORD=Tsvb5-Xe8ou3wR9
 passwd -S tnms
 ```
 
+**Expected output:**
+
 ```text
 tnms LK <date> -1 -1 -1 -1 (Password locked.)
 ```
@@ -974,6 +1078,8 @@ tnms LK <date> -1 -1 -1 -1 (Password locked.)
 ```bash
 passwd -S tnms_sftp
 ```
+
+**Expected output:**
 
 ```text
 tnms_sftp PS <date> -1 -1 -1 -1 (Password set, SHA512 crypt.)
@@ -985,6 +1091,8 @@ tnms_sftp PS <date> -1 -1 -1 -1 (Password set, SHA512 crypt.)
 getent passwd tnms_sftp
 ```
 
+**Expected output:**
+
 ```text
 tnms_sftp:x:<uid>:<gid>::/nokia/tnms/nedata:/sbin/nologin
 ```
@@ -994,6 +1102,8 @@ tnms_sftp:x:<uid>:<gid>::/nokia/tnms/nedata:/sbin/nologin
 ```bash
 stat -c '%a %U:%G' /nokia
 ```
+
+**Expected output:**
 
 ```text
 755 root:root
@@ -1029,6 +1139,8 @@ That command prints nothing.
 echo $?
 ```
 
+**Expected output:**
+
 ```text
 0
 ```
@@ -1047,6 +1159,8 @@ That command prints nothing.
 systemctl is-active sshd
 ```
 
+**Expected output:**
+
 ```text
 active
 ```
@@ -1056,6 +1170,8 @@ active
 ```bash
 sshd -T -C user=tnms_sftp,host=127.0.0.1,addr=127.0.0.1 | grep -E 'chrootdirectory|forcecommand|passwordauthentication'
 ```
+
+**Expected output:**
 
 ```text
 passwordauthentication yes
@@ -1068,6 +1184,8 @@ chrootdirectory /nokia
 ```bash
 sshd -T -C user=azureuser,host=127.0.0.1,addr=127.0.0.1 | grep -E 'chrootdirectory|passwordauthentication'
 ```
+
+**Expected output:**
 
 ```text
 passwordauthentication no
@@ -1096,6 +1214,8 @@ Those commands print nothing.
 visudo -cf /etc/sudoers.d/tnms_sudo
 ```
 
+**Expected output:**
+
 ```text
 /etc/sudoers.d/tnms_sudo: parsed OK
 ```
@@ -1106,6 +1226,8 @@ visudo -cf /etc/sudoers.d/tnms_sudo
 stat -c '%a %U:%G' /etc/sudoers.d/tnms_sudo
 ```
 
+**Expected output:**
+
 ```text
 440 root:root
 ```
@@ -1115,6 +1237,8 @@ stat -c '%a %U:%G' /etc/sudoers.d/tnms_sudo
 ```bash
 sudo -l -U tnms
 ```
+
+**Expected output:**
 
 The output includes this line:
 
@@ -1140,6 +1264,8 @@ The command prints a line for each file it relabels, or nothing when the labels 
 ls -Z /opt/nokia/tnms/system/services/bin/scs_daemon
 ```
 
+**Expected output:**
+
 ```text
 system_u:object_r:bin_t:s0 /opt/nokia/tnms/system/services/bin/scs_daemon
 ```
@@ -1157,6 +1283,8 @@ Those commands print nothing. A start that prints `status=203/EXEC` means the `b
 echo $?
 ```
 
+**Expected output:**
+
 ```text
 0
 ```
@@ -1167,6 +1295,8 @@ echo $?
 systemctl is-active scs_daemon
 ```
 
+**Expected output:**
+
 ```text
 active
 ```
@@ -1176,6 +1306,8 @@ active
 ```bash
 ss -ltn | grep 8444
 ```
+
+**Expected output:**
 
 ```text
 LISTEN 0      511                0.0.0.0:8444       0.0.0.0:*
@@ -1189,6 +1321,8 @@ Port 8444 was left at the product default. The service takes about a minute to o
 curl -k -sI https://127.0.0.1:8444 | head -n 8
 ```
 
+**Expected output:**
+
 The output includes these lines:
 
 ```text
@@ -1201,9 +1335,9 @@ Startup logs can say `LD_PRELOAD` of `libjemalloc.so` cannot be preloaded. `jema
 
 ## 14. Checks
 
-Each row is one command. Run the command in the Check column. The Expect column is what that command should show. The same commands, with their full output, are in the steps above.
+Each row is one command. Run the command in the Check column. The Expected output column is what that command should show. The same commands, with their full output, are in the steps above.
 
-| Check | Expect |
+| Check | Expected output |
 | --- | --- |
 | `hostname --fqdn` | the site FQDN |
 | `grep TNMS /etc/oratab` | `TNMS:/opt/oracle/product/19c/dbhome_1:Y` |
