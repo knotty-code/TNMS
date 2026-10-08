@@ -87,9 +87,9 @@ Also done before the database installer:
 
 The separate security-patch script in the prerequisites tree expects later patch zips (`p6880880`, `p38629535`, `p38586770`, `p38523609`). Those files are not in the media we have. The database installer already applied the 19.7 patches that shipped inside `LINUX.X64_193000_db_home_and_patches (1).zip`.
 
-## TNMS Server and Mediation, started 2026-10-08 02:59 UTC
+## TNMS Server and Mediation, 2026-10-08 02:59–03:37 UTC
 
-`TNMS.bin` is InstallAnywhere. This build rejects `-i console` (`Installer User Interface Mode Not Supported`). Silent mode needs a response file, and the media does not ship one. The wizard is running as GUI on Xvfb display `:99`, with `-r /root/tnms-install.properties`.
+`TNMS.bin` is InstallAnywhere. This build rejects `-i console` (`Installer User Interface Mode Not Supported`). Silent mode needs a response file, and the media does not ship one. The wizard ran as a GUI on Xvfb display `:99`, with `-r /root/tnms-install.properties`. That file can contain passwords. It stays on the host and is not in git.
 
 Choices entered:
 
@@ -109,13 +109,26 @@ Choices entered:
 | Network elements | Generic SNMP only |
 | Summary | install `/opt/nokia/tnms`, data `/nokia/tnms`, IP `172.16.0.4`, set Server+Mediation, user `tnms`, group `tnms`, SFTP user `tnms_sftp` |
 
+`PUs/` was empty, so the summary showed no PDT numbers. Build on disk is `9.1.0.593.0`.
+
 Two host changes were required before the copy started:
 
-- The Small Plus page warns that the host does not have 32 GB of RAM and returns to that page. For this stand-up, `/usr/bin/lsmem` was wrapped so `lsmem --summary` reports `Total online memory: 32G`. The real binary is `/usr/bin/lsmem.real`. Remove the wrapper when the wizard is finished.
-- InstallAnywhere measures free space on `/`, not on the bind mount. `/` was 2 GB. `rootlv` was extended from 2 GB to 8 GB so the check could pass. The product files go to the `/opt/nokia` and `/nokia` bind mounts on the 1 TB disk.
+- The Small Plus page returns to itself unless `lsmem --summary` reports at least 32G. This host has 16G. `/usr/bin/lsmem` was wrapped so that command printed `Total online memory: 32G`. After the wizard exited, the real binary was moved back from `/usr/bin/lsmem.real`. `lsmem --summary` again reports 16G.
+- InstallAnywhere measures free space on `/`. `/` was 2 GB. `rootlv` was extended from 2 GB to 8 GB. The product files are on the `/opt/nokia` and `/nokia` bind mounts.
 
-`db_setup.sh` exited 2. The SQL log records `ORA-02065` on `alter system set "_bug33046179_kqr_hot_copy_sleep_limit"=0`. That parameter is not valid on the 19.7 database this media installed. The installer logged `Fatal Exception: Error in db_setup.sh` and then continued into the merge-module copy. The wizard was at 38 percent and still running when this note was written. Passwords remain only in `/root/tnms-db-credentials`.
+`db_setup.sh` exited 2. The SQL log `/nokia/tnms/trace/system/install/sql/db_setup_TNMS_2026.10.08.030728.log` has one `Error executing` line: `ORA-02065` on `alter system set "_bug33046179_kqr_hot_copy_sleep_limit"=0`. That hidden parameter is not valid on this 19.7 database. The SQL tool continued, and every component in the creation summary returned OK. The result page said the installation finished with serious errors. Done was clicked, and `configure_system.sh` then exited 0, including `scs_daemon.service`.
+
+After the wizard:
+
+- `tnms` stays locked. `tnms_sftp` has a password stored as `TNMS_SFTP_PASSWORD` in `/root/tnms-db-credentials`, and its shell is `/sbin/nologin`. `/nokia` is mode 755, owned by root. `sshd` uses `internal-sftp`. A `Match User tnms_sftp` block chroots that user to `/nokia` and forces `internal-sftp`. Global `PasswordAuthentication` stays `no`. The Match block sets `PasswordAuthentication yes` for `tnms_sftp` only. `sshd -t` passed before `systemctl restart sshd`. A local SFTP login lists `tnms` at the chroot root. A shell login is refused. `azureuser` still has password authentication off and no chroot.
+- `/etc/sudoers.d/tnms_sudo` is mode 440, root:root, copied from `/opt/nokia/tnms/system/install/resources/system/tnms_sudo`. `sudo -l -U tnms` lists the SCS service commands and `database.sh`.
+- The installer enabled `scs_daemon.service` and left it stopped. The first start failed with status 203/EXEC. SELinux denied `init_t` execute because the bind from `/home/tnms-layout/nokia-opt` was labeled `user_home_t`. `restorecon -RF /opt/nokia` labeled `scs_daemon` and the NGINX binary `bin_t`. Oracle under `/opt/oracle` was left unchanged. The service is `active`.
+- NGINX listens on `0.0.0.0:8444`. `https://127.0.0.1:8444` returns 301 to `/tnms-webclient`. The port was left at 8444.
+- Process start logs report that `LD_PRELOAD` of `libjemalloc.so` cannot be preloaded. `jemalloc-5.2.1-3.el8` is installed and the processes still started.
+- FTP, the SHA-1 crypto policy, DSA host keys, eDNA, Node Manager, a Frontend Server, and RPP were left out.
+
+With the stack up on this 16 GB host, available memory was a few hundred MB and swap use was about 3.5 GB. No OOM kill was recorded. `ora_pmon_TNMS` was still running, and the listener was still on port 1521. The service was left running.
 
 ## Not done yet
 
-Wait for `TNMS.bin` to finish, then the SFTP account, the sudoers drop-in, and the NGINX 8444 check. Restore `/usr/bin/lsmem` after the wizard exits.
+The Windows client is a separate procedure. License keys after the 90-day trial are an Administration Manual task. The client SFTP path fields (`/tnms/nedata`) are set in the TNMS Client once a client can log in.

@@ -1,6 +1,6 @@
 # TNMS 9.1 on Linux — installation we are following
 
-**Status: Oracle 19c is installed (Small Plus, SID `TNMS`). TNMS Server and Mediation is not installed yet.** The planned procedure is below. What we have actually done on this host is in [install-log.md](install-log.md).
+**Status: Oracle 19c (Small Plus, SID `TNMS`) and TNMS 9.1.0.593.0 Server and Mediation are installed on this host.** `scs_daemon` is running and NGINX answers on port 8444. The wizard reported one serious error, `ORA-02065` from `db_setup.sh`, and the install was kept. What was done on this host is in [install-log.md](install-log.md). The procedure below is the path to repeat.
 
 This is the path for one physical machine, **Small Plus**, **RHEL**, with **TNMS Server and TNMS Mediation on that same machine**. A customer who repeats these steps, with their own site values, gets the same install.
 
@@ -373,6 +373,12 @@ chmod 744 ./TNMS.bin
 ./TNMS.bin
 ```
 
+This build rejects `-i console` (`Installer User Interface Mode Not Supported`). Run the GUI. On a host whose default target is `multi-user` and has no graphical session, run that GUI on a virtual display.
+
+InstallAnywhere measures free space on `/`, even when `/opt/nokia/tnms` is a bind mount on a larger disk. `/` needs about 5 GB free before **Install** is clicked. On this host `rootlv` was extended from 2 GB to 8 GB.
+
+The Small Plus page returns to itself unless `lsmem --summary` reports at least 32G. A host that reports less can pass the page only if that command prints 32G for the duration of the wizard. Put the real `lsmem` back as soon as the wizard has left that page.
+
 Wizard choices for this design:
 
 | Screen | Choice |
@@ -393,7 +399,15 @@ If the wizard says users or groups already exist, stop. As root, remove only the
 
 The manual shows a warning when the firewall is enabled (`Enabled Firewall detected`). firewalld is already stopped in section 5, so that warning should not appear. If it does, firewalld is still running. The Communication Matrix lists the ports to open when the firewall is turned back on.
 
-When the result page says the install succeeded:
+The result page can say the installation finished with serious errors. On the 19.7 database from this media, `db_setup.sh` exits 2 because this statement is rejected:
+
+```text
+alter system set "_bug33046179_kqr_hot_copy_sleep_limit"=0
+```
+
+The SQL log shows `ORA-02065: illegal option for ALTER SYSTEM`. The tool continues, the component creation summary is OK, and **Done** still runs `configure_system.sh`. Keep the install when that is the only error. Uninstall is for a creation summary that is not OK.
+
+Then:
 
 ```bash
 . /etc/profile.d/ossnms.sh
@@ -432,7 +446,10 @@ Match User tnms_sftp
     ForceCommand internal-sftp
     X11Forwarding no
     AllowTcpForwarding no
+    PasswordAuthentication yes
 ```
+
+`PasswordAuthentication yes` belongs only in this Match block. This image sets `PasswordAuthentication no` for every user. Leave that global line as it is, so `tnms_sftp` is the account that can use a password. Test the file with `sshd -t` before `systemctl restart sshd`.
 
 ```bash
 systemctl restart sshd
@@ -453,8 +470,12 @@ Manual section 7.6. Root still administers the TNMS service. This also lets the 
 ```bash
 cp -p "$SYSTEM_INSTALL_DIR/resources/system/tnms_sudo" /etc/sudoers.d
 chown root:root /etc/sudoers.d/tnms_sudo
+chmod 440 /etc/sudoers.d/tnms_sudo
+visudo -cf /etc/sudoers.d/tnms_sudo
 sudo -l -U tnms
 ```
+
+The shipped file is mode 640, group `tnms`. Mode 440 is what this host uses so the drop-in stays readable by root only. `visudo -cf` checks the syntax before sudo will rely on it.
 
 `sudo -l -U tnms` lists the TNMS service commands. If the OS user were not `tnms`, that name would have to be edited into `tnms_sudo`. This install keeps `tnms`.
 
@@ -462,9 +483,16 @@ sudo -l -U tnms
 
 Leave port 8444. Change it only when another program already has that port, using manual section 7.1.
 
+The installer enables `scs_daemon.service` and leaves it stopped. If `/opt/nokia` is a bind mount from a directory created under `/home`, SELinux labels the tree `user_home_t` and the first start fails with status 203/EXEC. `restorecon -RF /opt/nokia` applies the `/opt` labels (`bin_t` on `*/bin` and `*/sbin`). Leave `/opt/oracle` alone while the database is running.
+
 ```bash
+restorecon -RF /opt/nokia
+systemctl reset-failed scs_daemon.service
+systemctl start scs_daemon
 ss -ltnp | grep 8444
 ```
+
+`https://127.0.0.1:8444` returns 301 to `/tnms-webclient` when NGINX is up.
 
 ### Checks
 
@@ -474,9 +502,10 @@ ss -ltnp | grep 8444
 | `systemctl is-active chronyd` | `active` |
 | Oracle installer and patch script | `Final status of the execution: Success` |
 | `verify_prerequisites_tnms.sh` on RHEL 9 | no `Error:` line |
-| Wizard | installation results success |
+| Wizard | result page may name the single `ORA-02065` from `db_setup.sh`; component creation summary OK; `configure_system.sh` exits 0 |
 | `. /etc/profile.d/ossnms.sh` | returns with no error |
 | `sudo -l -U tnms` | TNMS service commands |
+| `systemctl is-active scs_daemon` | `active` |
 | `ss -ltnp \| grep 8444` | NGINX listening |
 
 Trial license: the first install runs for 90 days with every feature available. License keys after that are an Administration Manual task, not part of this procedure.
@@ -487,17 +516,17 @@ Fill this in when the procedure has been run. Progress before that is recorded i
 
 | Field | Value |
 | --- | --- |
-| Date | |
-| Hostname and FQDN | |
-| RHEL `cat /etc/redhat-release` | |
-| Kernel `uname -r` | |
-| TNMS build / zip name | |
-| PDT numbers shown on the summary page | |
-| Oracle SID | |
-| Managers, NBIs, NE families selected | |
-| Deviations from this guide | |
+| Date | 2026-10-08 |
+| Hostname and FQDN | `TNMS`, `TNMS.vmefr40i5gquree1lezspcyb0c.gx.internal.cloudapp.net` |
+| RHEL `cat /etc/redhat-release` | Red Hat Enterprise Linux release 8.10 (Ootpa) |
+| Kernel `uname -r` | `4.18.0-553.134.1.el8_10.x86_64` |
+| TNMS build / zip name | `9.1.0.593.0`, from `TNMS_LUX_R9.1.0.593.0_1904.zip` |
+| PDT numbers shown on the summary page | none. `PUs/` was empty |
+| Oracle SID | `TNMS`, listener `LISNER` port 1521 |
+| Managers, NBIs, NE families selected | Ethernet, ASON, Optical, Optical Spectrum Insight. No NBIs. Generic SNMP only |
+| Deviations from this guide | 16 GB RAM with a temporary `lsmem` wrapper, removed after the wizard. `rootlv` grown from 2 GB to 8 GB. Wizard on Xvfb. `ORA-02065` kept. `PasswordAuthentication yes` only inside the `tnms_sftp` Match block. `restorecon -RF /opt/nokia` before `scs_daemon` would start. `patch.sh` not run; the later patch zips are not in this media |
 | Database log directory | `/home/oracle/ossnms_installation_log` |
-| Database install log | `/tmp/oracle_installation:<timestamp>.log` |
+| Database install log | `/home/oracle/ossnms_installation_log/` |
 
 ## Reference
 
