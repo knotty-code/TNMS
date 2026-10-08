@@ -1,6 +1,6 @@
 # TNMS 9.1 on Linux — installation we are following
 
-**Status: procedure written, not yet run on a host.**
+**Status: blocked on the Oracle media.** The planned procedure is below. What we have actually done on this host is in [install-log.md](install-log.md).
 
 This is the path for one physical machine, **Small Plus**, **RHEL**, with **TNMS Server and TNMS Mediation on that same machine**. A customer who repeats these steps, with their own site values, gets the same install.
 
@@ -483,7 +483,7 @@ Trial license: the first install runs for 90 days with every feature available. 
 
 ## 10. Install record
 
-Fill this in when the procedure is actually run. Until then the status line at the top stays "not yet run".
+Fill this in when the procedure has been run. Progress before that is recorded in [install-log.md](install-log.md).
 
 | Field | Value |
 | --- | --- |
