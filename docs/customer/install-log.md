@@ -48,6 +48,28 @@ The first copy failed as follows. The `(1)` copy replaced every row with a match
 
 The retransfer arrived as `LINUX.X64_193000_db_home_and_patches (1).zip` at 02:14 UTC. All four members are complete and match the installer checksums, including `p35775632_190000_Linux-x86-64.zip` (`0428e0284fdc98e04971c565d0a7fd49`), which the installer uses only on RHEL 9. The original 3.7 GB file is still the failed copy. Use the `(1)` file.
 
+## Host preparation, 2026-10-08
+
+The 2 GB root filesystem cannot hold Oracle or TNMS. These paths are bind mounts onto `/home`:
+
+| Path the installer uses | Backing directory |
+| --- | --- |
+| `/opt/oracle` | `/home/tnms-layout/oracle` |
+| `/opt/nokia` | `/home/tnms-layout/nokia-opt` |
+| `/nokia` | `/home/tnms-layout/nokia` |
+| `/oradata` | `/home/tnms-layout/oradata` with `ora1`, `ora2`, and `ora3` |
+
+Also done before the database installer:
+
+- Swap file `/home/tnms-layout/swapfile`, 18 GB, in `/etc/fstab`.
+- `/tmp` logical volume extended from 2 GB to 16 GB. It is not mounted `noexec`.
+- `/etc/hosts` maps `172.16.0.4` to the FQDN and `TNMS`.
+- `/etc/sysctl.d/99-tnms.conf` sets `vm.swappiness`, `vm.dirty_ratio`, `vm.dirty_background_ratio`, and `vm.min_free_kbytes` from the manual.
+- `firewalld` stopped and disabled for the install window.
+- RHEL 8 packages from the procedure installed, plus `unzip`, `perl`, `binutils`, `glibc-devel`, and `libaio`. EPEL was added for `jemalloc`.
+- NIS domain name is `(none)`. SELinux is enforcing.
+- Database configuration passed to the installer is Small Plus (`SP`), SID `TNMS`, listener port `1521`, listener name `LISNER`. The host has 16 GB of RAM, so the installer's 32 GB memory check will fail and silent mode is set to continue. Passwords are in `/root/tnms-db-credentials` and are not in git.
+
 ## Not done yet
 
-No packages, mounts, firewall, or installer commands have been changed for TNMS. The only host change so far is the earlier extension of `/home` onto the 1 TB disk.
+Oracle software installation and TNMS Server and Mediation installation.
