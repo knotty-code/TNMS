@@ -34,7 +34,7 @@ PROPS=/root/tnms-install.properties
 if [[ "$DRY" -eq 1 ]]; then
   PROPS=/tmp/tnms-install.properties.dry-run
 fi
-BIN=/home/tnms-layout/installer/TNMS_Installer/TNMS.bin
+BIN=/opt/tnms-install/installer/TNMS_Installer/TNMS.bin
 LOG=/root/tnms-wizard.log
 MIN_ROOT_BYTES=$((4531 * 1000 * 1000))
 

@@ -2,7 +2,7 @@
 
 Run this on a fresh Red Hat Enterprise Linux 8 server, as root, from top to bottom. It is the sequence that installed TNMS 9.1.0.593.0 Server and Mediation with Oracle 19c on 2026-10-08.
 
-Do not clone this repository onto the server. The wizard files and the three vendor zip files go in `/opt/tnms-install`. Step 4 mounts that directory on the large disk, and the copy commands follow that step.
+Prepare the VM with [pre-install.md](pre-install.md) first. That guide mounts the 1 TB disk on `/opt`. Then run this guide. The wizard files and the three vendor zip files go in `/opt/tnms-install`.
 
 One machine. Small Plus. TNMS Server and Mediation together. New database.
 
@@ -12,7 +12,7 @@ A line that says **Confirm by running** is a separate command. Run that command.
 
 ## Where the install files go
 
-> Get `install-tnms-wizard.sh`, `tnms-install.properties.in`, and the three vendor zip files with this guide. Put them in `/opt/tnms-install` after step 4. The script reads the properties file from that same directory. One file without the other stops the script.
+> Get `install-tnms-wizard.sh`, `tnms-install.properties.in`, and the three vendor zip files with this guide. Put them in `/opt/tnms-install` after the pre-install checks pass. The script reads the properties file from that same directory. One file without the other stops the script.
 
 | Wizard file | Path on the server |
 | --- | --- |
@@ -20,7 +20,7 @@ A line that says **Confirm by running** is a separate command. Run that command.
 | tnms-install.properties.in | /opt/tnms-install/tnms-install.properties.in |
 | Three vendor zip files | /opt/tnms-install/resources/ |
 
-`/opt` is the directory for add-on software. On this server `/opt` itself is on the 8 GB root filesystem. The Oracle zip is about 5 GB, so step 4 bind-mounts `/opt/tnms-install` onto the large disk. Copy the files after that mount. A copy into `/opt/tnms-install` before the mount lands on the root filesystem, and the mount then hides those files.
+`/opt` is the 1 TB volume from the pre-install guide. `/opt/oracle`, `/opt/nokia`, and `/opt/tnms-install` are directories on that volume. Copy the files after `df` shows `/opt` on `datavg-optlv`.
 
 Keep both wizard file names. Leave `tnms-install.properties.in` unchanged. The script writes the server IPv4 into a separate response file, `/root/tnms-install.properties`. Database passwords stay in `/root/tnms-db-credentials` from step 6. Leave those passwords out of the properties file. Leave both wizard files out of the `TNMS.bin` directory. The copy commands are in **Copy the install files**, after step 4. Run the script in step 9.
 
@@ -62,15 +62,15 @@ Substitute the site address and names. Keep the paths and the SID unless the sit
 | `SYSTEM` password | `TnZT5hgW8Zwsp79` |
 | `tnmsdba` password | `Tnc25xQ36XBUa9` |
 | `tnms_sftp` password | `Tsvb5-Xe8ou3wR9` |
-| Large-disk directory | `/home/tnms-layout` (the big filesystem on this host was `/home`) |
-| Install files | `/opt/tnms-install` on the large disk |
+| Large disk | `/opt` on `datavg/optlv`, the 1 TB volume |
+| Install files | `/opt/tnms-install` |
 | Media directory | `/opt/tnms-install/resources` |
 
 Password rule used for `SYS`, `SYSTEM`, and `tnmsdba`: 6 to 30 characters from `a-z`, `A-Z`, `0-9`, and `+ - _ { }`. `SYS` and `SYSTEM` are the same value. `tnmsdba` is a different value. The SFTP password is separate again.
 
 ## Media to copy onto the server
 
-These three zip files are the Oracle and TNMS media. Copy them into `/opt/tnms-install/resources` with the wizard files, in **Copy the install files** after step 4.
+These three zip files are the Oracle and TNMS media. Copy them into `/opt/tnms-install/resources` with the wizard files, in **Copy the install files**.
 
 | File | Role |
 | --- | --- |
@@ -310,28 +310,31 @@ active
 
 ## 4. Disk space the installers actually check
 
+The pre-install guide mounts the 1 TB disk on `/opt` and creates the directories below. This step confirms that layout. When a check fails, go back to `docs/customer/pre-install.md`. The original server grew `/` and `/tmp` and put the 1 TB disk on `/home`. That record is `docs/customer/install-log.md`.
+
 The Oracle installer and `TNMS.bin` need all of the following:
 
-- `/` has at least 8 GB free. `TNMS.bin` measures free space on `/`, including when `/opt/nokia/tnms` is a bind mount on a larger disk. The check that passed here asked for 4,530 MB.
+- `/` has at least 4,531 MB free. The wizard script measures free space on `/`.
+- `/opt` is the 1 TB volume. `TNMS.bin` measures free space on the filesystem that holds `/opt/nokia/tnms`.
 - `/tmp` has at least 16 GB free and is not mounted `noexec`.
-- Swap is at least 8 GB. This host used an 18 GB swap file.
-- `/opt/oracle`, `/opt/nokia`, `/nokia`, and `/oradata` have room for the product. Oracle data uses `/oradata/ora1`, `/oradata/ora2`, and `/oradata/ora3`.
-
-Check the three filesystems before changing anything. Each check is its own command.
+- Swap is 18 GB.
+- `/opt/oracle`, `/opt/nokia`, `/nokia`, and `/oradata` are present. Oracle data uses `/oradata/ora1`, `/oradata/ora2`, and `/oradata/ora3`.
 
 **Confirm by running:**
 
 ```bash
-df -h / /tmp
+df -h / /tmp /home /opt
 ```
 
 **Expected output:**
 
-Read the `Avail` column. `/` needs at least 8 GB free. `/tmp` needs at least 16 GB free. On this host, before the changes below, `/` was 2 GB and `/tmp` was 2 GB. After those changes the same command included:
+`/` is about 8G with several GB free. `/tmp` is 16G. `/home` is about 8G. `/opt` is about 1T. Used and available sizes move.
 
 ```text
 /dev/mapper/rootvg-rootlv  8.0G  123M  7.9G   2% /
 /dev/mapper/rootvg-tmplv    16G  1.3G   15G   8% /tmp
+/dev/mapper/rootvg-homelv   8.0G  100M  7.9G   2% /home
+/dev/mapper/datavg-optlv    1.1T   20G  1.1T   2% /opt
 ```
 
 **Confirm by running:**
@@ -342,7 +345,7 @@ findmnt -no OPTIONS /tmp
 
 **Expected output:**
 
-The word `noexec` is absent. On this host the line was:
+The word `noexec` is absent.
 
 ```text
 rw,relatime,seclabel,attr2,inode64,logbufs=8,logbsize=32k,noquota
@@ -356,107 +359,9 @@ swapon --show
 
 **Expected output:**
 
-The command prints nothing when the server has no swap yet. This host had no swap before the file created below. After that file, the same command prints a line for `/home/tnms-layout/swapfile` with size `18G`. The full line is in the post-change confirm later in this step.
-
-**This host.** `/` was a 2 GB logical volume and the 1 TB disk was `/home`. These are the commands that made the layout the installers accepted. Skip a command when that filesystem is already large enough. The volume names were `/dev/rootvg/rootlv` and `/dev/rootvg/tmplv`.
-
-```bash
-lvextend -r -L 8G /dev/rootvg/rootlv
-```
-
-**Expected output:**
-
-The output includes:
-
 ```text
-successfully resized
-```
-
-```bash
-lvextend -r -L 16G /dev/rootvg/tmplv
-```
-
-**Expected output:**
-
-The output includes `successfully resized` again.
-
-```bash
-mkdir -p /home/tnms-layout/oracle \
-  /home/tnms-layout/nokia-opt \
-  /home/tnms-layout/nokia \
-  /home/tnms-layout/tnms-install \
-  /home/tnms-layout/oradata/ora1 \
-  /home/tnms-layout/oradata/ora2 \
-  /home/tnms-layout/oradata/ora3
-mkdir -p /opt/oracle /opt/nokia /opt/tnms-install /nokia /oradata
-```
-
-Those commands print nothing.
-
-```bash
-dd if=/dev/zero of=/home/tnms-layout/swapfile bs=1G count=18 status=progress
-```
-
-The command finishes when it has written 18 GB.
-
-```bash
-chmod 600 /home/tnms-layout/swapfile
-```
-
-That command prints nothing.
-
-```bash
-mkswap /home/tnms-layout/swapfile
-```
-
-**Expected output:**
-
-The output includes:
-
-```text
-Setting up swapspace version 1, size = 18 GiB
-```
-
-```bash
-swapon /home/tnms-layout/swapfile
-```
-
-That command prints nothing.
-
-Append these lines to `/etc/fstab`, then mount them:
-
-```text
-/home/tnms-layout/oracle       /opt/oracle       none bind 0 0
-/home/tnms-layout/nokia-opt    /opt/nokia        none bind 0 0
-/home/tnms-layout/nokia        /nokia            none bind 0 0
-/home/tnms-layout/oradata      /oradata          none bind 0 0
-/home/tnms-layout/tnms-install /opt/tnms-install none bind 0 0
-/home/tnms-layout/swapfile     none              swap sw   0 0
-```
-
-```bash
-systemctl daemon-reload
-```
-
-That command prints nothing.
-
-```bash
-mount -a
-```
-
-That command prints nothing.
-
-**Confirm by running:**
-
-```bash
-swapon --show
-```
-
-**Expected output:**
-
-```text
-NAME                       TYPE SIZE USED PRIO
-/home/tnms-layout/swapfile file  18G  4.8G   -2
+NAME          TYPE SIZE USED PRIO
+/opt/swapfile file  18G   0B   -2
 ```
 
 The `USED` column moves. `SIZE` stays `18G`.
@@ -464,38 +369,47 @@ The `USED` column moves. `SIZE` stays `18G`.
 **Confirm by running:**
 
 ```bash
-df -h / /tmp /opt/oracle /opt/nokia /opt/tnms-install /nokia /oradata
+df -h /opt /opt/oracle /opt/nokia /opt/tnms-install /nokia /oradata
 ```
 
 **Expected output:**
 
-The output includes these lines. Used and available sizes move. `/` is about 8G with several GB free, `/tmp` is 16G, and the product paths, including `/opt/tnms-install`, are on the large filesystem.
+Every line is `datavg-optlv`. `/opt/oracle`, `/opt/nokia`, and `/opt/tnms-install` are directories on the 1 TB volume. `/nokia` and `/oradata` are bind mounts from that volume.
+
+**Confirm by running:**
+
+```bash
+for p in /opt /nokia /oradata; do findmnt -n -o SOURCE,TARGET "$p"; done
+```
+
+**Expected output:**
+
+`/opt` is `datavg-optlv`. `/nokia` and `/oradata` include the source directory in brackets.
 
 ```text
-/dev/mapper/rootvg-rootlv  8.0G  123M  7.9G   2% /
-/dev/mapper/rootvg-tmplv    16G  1.3G   15G   8% /tmp
-/dev/mapper/rootvg-homelv  1.1T   92G  941G   9% /opt/oracle
-/dev/mapper/rootvg-homelv  1.1T   92G  941G   9% /opt/nokia
-/dev/mapper/rootvg-homelv  1.1T   92G  941G   9% /opt/tnms-install
-/dev/mapper/rootvg-homelv  1.1T   92G  941G   9% /nokia
-/dev/mapper/rootvg-homelv  1.1T   92G  941G   9% /oradata
+/dev/mapper/datavg-optlv              /opt
+/dev/mapper/datavg-optlv[/tnms-data]  /nokia
+/dev/mapper/datavg-optlv[/oradata]    /oradata
 ```
 
 **Confirm by running:**
 
 ```bash
-findmnt /opt/oracle /opt/nokia /opt/tnms-install /nokia /oradata
+ls -d /opt/oradata/ora1 /opt/oradata/ora2 /opt/oradata/ora3 /opt/tnms-install/resources
 ```
 
 **Expected output:**
 
-Each of the five paths is listed, and each line includes `bind`.
-
-On a fresh server whose `/` is already large, create `/opt/oracle`, `/opt/nokia`, `/opt/tnms-install`, `/nokia`, and `/oradata` on `/` and skip the bind mounts and `lvextend`. Still create `ora1`, `ora2`, and `ora3` under `/oradata`. `df -h /` then shows at least 8 GB available, and `findmnt /opt/oracle` shows that path on the root filesystem.
+```text
+/opt/oradata/ora1
+/opt/oradata/ora2
+/opt/oradata/ora3
+/opt/tnms-install/resources
+```
 
 ## Copy the install files
 
-Run this after the step 4 mount check. `/opt/tnms-install` is the large disk. `/tmp` is the 16 GB filesystem from that step. The Oracle zip is about 5 GB.
+Run this after the step 4 checks. `/opt/tnms-install` is on the 1 TB volume. `/tmp` is the 16 GB filesystem. The Oracle zip is about 5 GB.
 
 Copy the two wizard files and the three zip files to `/tmp` on the server. Any SSH user can receive that copy. From the workstation directory that contains the five files:
 
@@ -635,19 +549,19 @@ No errors detected in compressed data of /opt/tnms-install/resources/TNMS_LUX_R9
 ```
 
 ```bash
-mkdir -p /opt/oracle/oramedia /home/tnms-layout/prereq /home/tnms-layout/installer
+mkdir -p /opt/oracle/oramedia /opt/tnms-install/prereq /opt/tnms-install/installer
 unzip -o "$MEDIA/LINUX.X64_193000_db_home_and_patches.zip" -d /opt/oracle/oramedia
-unzip -o "$MEDIA/TNMS_LUX_R9.1.0.593.0_1904_Prerequisites.zip" -d /home/tnms-layout/prereq
-unzip -o "$MEDIA/TNMS_LUX_R9.1.0.593.0_1904.zip" -d /home/tnms-layout/installer
+unzip -o "$MEDIA/TNMS_LUX_R9.1.0.593.0_1904_Prerequisites.zip" -d /opt/tnms-install/prereq
+unzip -o "$MEDIA/TNMS_LUX_R9.1.0.593.0_1904.zip" -d /opt/tnms-install/installer
 ```
 
 `mkdir` prints nothing. Each `unzip -o` prints one line per file it writes and returns to the prompt when that zip is unpacked.
 
 ```bash
-find /home/tnms-layout/prereq/TNMS_Prerequisites/Oracle -type d -exec chmod 755 {} \;
-find /home/tnms-layout/prereq/TNMS_Prerequisites/Oracle -type f -exec chmod 644 {} \;
-find /home/tnms-layout/prereq/TNMS_Prerequisites/Oracle -name '*.sh' -exec chmod 755 {} \;
-chmod 744 /home/tnms-layout/installer/TNMS_Installer/TNMS.bin
+find /opt/tnms-install/prereq/TNMS_Prerequisites/Oracle -type d -exec chmod 755 {} \;
+find /opt/tnms-install/prereq/TNMS_Prerequisites/Oracle -type f -exec chmod 644 {} \;
+find /opt/tnms-install/prereq/TNMS_Prerequisites/Oracle -name '*.sh' -exec chmod 755 {} \;
+chmod 744 /opt/tnms-install/installer/TNMS_Installer/TNMS.bin
 ```
 
 Those commands print nothing.
@@ -670,7 +584,7 @@ p35775632_190000_Linux-x86-64.zip
 **Confirm by running:**
 
 ```bash
-ls -l /home/tnms-layout/installer/TNMS_Installer/TNMS.bin
+ls -l /opt/tnms-install/installer/TNMS_Installer/TNMS.bin
 ```
 
 **Expected output:**
@@ -680,7 +594,7 @@ The permission field is `-rwxr--r--` (mode `744`).
 **Confirm by running:**
 
 ```bash
-ls -l /home/tnms-layout/prereq/TNMS_Prerequisites/Oracle/installation/installation.sh
+ls -l /opt/tnms-install/prereq/TNMS_Prerequisites/Oracle/installation/installation.sh
 ```
 
 **Expected output:**
@@ -742,7 +656,7 @@ unset http_proxy https_proxy HTTP_PROXY HTTPS_PROXY no_proxy NO_PROXY
 set -a
 . /root/tnms-db-credentials
 set +a
-cd /home/tnms-layout/prereq/TNMS_Prerequisites/Oracle/installation
+cd /opt/tnms-install/prereq/TNMS_Prerequisites/Oracle/installation
 ./installation.sh \
   -silent_mode=Y \
   -configuration_type=SP \
@@ -1269,7 +1183,7 @@ The shipped file is mode 640, group `tnms`. Mode 440 is what this host uses.
 
 ## 13. Start the service
 
-The wizard enables `scs_daemon.service` and leaves it stopped. On this host the first start failed with status 203/EXEC. SELinux denied execute because the files under the `/home` bind mount were labeled `user_home_t`. Relabel `/opt/nokia` only. Leave `/opt/oracle` alone while the database is open.
+The wizard enables `scs_daemon.service` and leaves it stopped. On the original server the first start failed with status 203/EXEC. SELinux denied execute because the files under the `/home` bind mount were labeled `user_home_t`. This VM creates those files on the `/opt` volume. Relabel `/opt/nokia` before the first start. Leave `/opt/oracle` alone while the database is open.
 
 ```bash
 restorecon -RF /opt/nokia
@@ -1459,7 +1373,7 @@ Those commands print nothing.
 **Open a second SSH session before the next command.** `./TNMS.bin` does not return until the wizard exits. The SSH window that starts it sits there with no prompt. From the workstation, open a new SSH connection to this same server and log in as root. That new connection is the second shell. Leave both connections open. Do not type in the first one, and do not close it. Every check and every screenshot below runs in the second shell. Keep a third window on the workstation, a terminal that is not logged into the server. That third window is only for downloading each picture.
 
 ```bash
-cd /home/tnms-layout/installer/TNMS_Installer
+cd /opt/tnms-install/installer/TNMS_Installer
 ./TNMS.bin -i gui -r /root/tnms-install.properties -tempdir /tmp/tnms-gui
 ```
 

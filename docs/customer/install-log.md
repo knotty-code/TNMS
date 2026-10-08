@@ -753,7 +753,7 @@ Small Plus refuses to continue until `lsmem --summary` reports at least 32G. Thi
 
 The script is `scripts/install-tnms-wizard.sh` in this repository. It reads `SYS_PASSWORD` and `TNMSDBA_PASSWORD` from `/root/tnms-db-credentials`, writes the server IPv4 into the response file, and runs `TNMS.bin -f /root/tnms-install.properties`. On a host with less than 32 GB it installs the `lsmem` wrapper for that run and removes the wrapper before it exits. It refuses to start when `/opt/nokia/tnms/server` already exists.
 
-Run it as root, in the same SSH session. On this host the repository is `/home/azureuser/TNMS`. A server that does not have this repository follows `docs/customer/install-without-repo.md`: after step 4, copy `install-tnms-wizard.sh`, `tnms-install.properties.in`, and the three zip files into `/opt/tnms-install`, then run `/opt/tnms-install/install-tnms-wizard.sh`.
+Run it as root, in the same SSH session. On this host the repository is `/home/azureuser/TNMS`. A new VM follows `docs/customer/pre-install.md`, then `docs/customer/install-without-repo.md`. That path mounts the 1 TB disk on `/opt`, copies `install-tnms-wizard.sh`, `tnms-install.properties.in`, and the three zip files into `/opt/tnms-install`, and runs `/opt/tnms-install/install-tnms-wizard.sh`.
 
 ```bash
 /home/azureuser/TNMS/scripts/install-tnms-wizard.sh
