@@ -825,14 +825,16 @@ export LANG=en_US.UTF-8
 
 Those commands print nothing.
 
+**Open a second SSH session before the next command.** `./TNMS.bin` does not return until the wizard exits. The SSH window that starts it sits there with no prompt. From the workstation, open a new SSH connection to this same server and log in as root. That new connection is the second shell. Leave both connections open. Do not type in the first one, and do not close it. Every check and every screenshot below runs in the second shell.
+
 ```bash
 cd /home/tnms-layout/installer/TNMS_Installer
 ./TNMS.bin -i gui -r /root/tnms-install.properties -tempdir /tmp/tnms-gui
 ```
 
-The installer window title is `TNMS 9.1.0.593.0 Installer`. The command does not return until the wizard exits. Leave that shell alone. Open a second shell for the checks below.
+Run that command in the first SSH session. The installer window title is `TNMS 9.1.0.593.0 Installer`. The prompt in that session does not come back until the wizard exits.
 
-**Confirm by running,** in the second shell, before answering screens:
+**Confirm by running,** in the second SSH session, before answering screens:
 
 ```bash
 ps -C Xvfb -o args=
@@ -852,9 +854,9 @@ This command does not open the installer. It prints the command line of the virt
 - `-ac` lets another program on this server read the screen. That is what makes the screenshot command below work.
 - A line that matches means the screen is up. The shell redirection `>/tmp/tnms-gui/xvfb.log` and the `&` are absent here. Those belong to the shell that started Xvfb, and they are not part of the process command line.
 
-The SSH session and the serial console show the text of the shell. The wizard is a window on display `:99`, so it does not appear in that text. Answers are clicks and typed fields on `:99`. Text entered at the shell prompt stays in the shell.
+Both SSH sessions show only text. The wizard is a window on display `:99`, so it does not appear in either session. The serial console is text as well. Answers are clicks and typed fields on `:99`. Text entered at either shell prompt stays in that shell.
 
-Look at the current page from the second shell:
+Still in the second SSH session, take a picture of the current page:
 
 ```bash
 dnf -y install ImageMagick
@@ -874,7 +876,7 @@ import -window root -display :99 /tmp/tnms-gui/screen.png
 
 That command prints nothing. Open `/tmp/tnms-gui/screen.png`. The picture is the wizard page that is on display `:99` right now. Take a new picture after each answer. The title in the picture is `TNMS 9.1.0.593.0 Installer`.
 
-On this host the clicks were sent with `xdotool` from the second session, with `DISPLAY=:99`. The first session stayed inside `./TNMS.bin` until the wizard exited. `xdotool` is not required when the window is on a real monitor.
+On this host the clicks were sent with `xdotool` from the second SSH session, with `DISPLAY=:99`. The first SSH session stayed inside `./TNMS.bin` until the wizard exited. `xdotool` is not required when the window is on a real monitor.
 
 **Graphical console.** Skip every Xvfb command and run `./TNMS.bin` from a terminal on the desktop. The window opens on the monitor. In that case the same `ps` command prints nothing, because Xvfb was never started. An empty result is the finished check on that path. On the Xvfb path, an empty result means the virtual screen is not running, so start Xvfb again before `./TNMS.bin`.
 
