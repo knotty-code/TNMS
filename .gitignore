@@ -1,0 +1,2 @@
+# Vendor install archives. Multi-gigabyte; keep them out of git.
+/resources/
