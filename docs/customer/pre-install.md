@@ -409,6 +409,40 @@ stat -c '%a %n' /opt/tnms-install /opt/tnms-install/resources
 
 Reboot, log in again, and run the five checks in this section a second time. The same mounts and the same swap file mean `/etc/fstab` is in effect.
 
-## 6. Next
+## 6. VS Code Remote SSH
+
+`/home` is about 1 GB. VS Code Remote SSH unpacks its server into `/home/azureuser/.vscode-server`. That unpack is larger than `/home` and stops with `No space left on device`. The TNMS install does not need VS Code. Run this section before connecting with VS Code Remote SSH.
+
+The server directory goes on the 1 TB volume. The login path stays `/home/azureuser/.vscode-server`, and that path is a symlink. Run as root.
+
+```bash
+rm -rf /home/azureuser/.vscode-server
+install -d -o azureuser -g "$(id -gn azureuser)" -m 700 /opt/azureuser/vscode-server
+ln -s /opt/azureuser/vscode-server /home/azureuser/.vscode-server
+chown -h azureuser:"$(id -gn azureuser)" /home/azureuser/.vscode-server
+```
+
+`rm` deletes the failed unpack on `/home`. `install` and `chown` print nothing.
+
+**Confirm by running:**
+
+```bash
+df -h /home
+ls -ld /home/azureuser/.vscode-server /opt/azureuser/vscode-server
+```
+
+**Expected output:**
+
+`/home` has several hundred MB free. The first `ls` line is a symlink to `/opt/azureuser/vscode-server`. The second line is mode `700` and owned by `azureuser`.
+
+```text
+/dev/mapper/rootvg-homelv 1014M   40M  975M   4% /home
+lrwxrwxrwx. 1 azureuser azureuser 28 Oct  8 20:00 /home/azureuser/.vscode-server -> /opt/azureuser/vscode-server
+drwx------. 2 azureuser azureuser  6 Oct  8 20:00 /opt/azureuser/vscode-server
+```
+
+The date and the link size follow the VM. Connect again as `azureuser`. New server files are written on `/opt`. Leave `/opt/tnms-install` mode `700` and owned by root. Put the five install files in `/tmp`, as `docs/customer/install-without-repo.md` describes.
+
+## 7. Next
 
 Continue with `docs/customer/install-without-repo.md`. Copy `install-tnms-wizard.sh`, `tnms-install.properties.in`, and the three vendor zip files into `/opt/tnms-install` as that guide describes. The properties file stays beside the script. The unpacked prerequisites and `TNMS.bin` go under `/opt/tnms-install/prereq` and `/opt/tnms-install/installer`.

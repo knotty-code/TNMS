@@ -411,7 +411,7 @@ ls -d /opt/oradata/ora1 /opt/oradata/ora2 /opt/oradata/ora3 /opt/tnms-install/re
 
 Run this after the step 4 checks. `/opt/tnms-install` is on the 1 TB volume. `/tmp` is the 16 GB filesystem. The Oracle zip is about 5 GB.
 
-Copy the two wizard files and the three zip files to `/tmp` on the server. Any SSH user can receive that copy. From the workstation directory that contains the five files:
+Copy the two wizard files and the three zip files to `/tmp` on the server. Any SSH user can receive that copy. `/home` is about 1 GB, so a VS Code Remote SSH connection needs the symlink in pre-install section 6 before it can unpack. The five install files still go to `/tmp`, not into `/home` and not directly into `/opt/tnms-install`. From the workstation directory that contains the five files:
 
 ```bash
 scp install-tnms-wizard.sh tnms-install.properties.in \
