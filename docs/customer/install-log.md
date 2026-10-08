@@ -782,16 +782,7 @@ On a server where `lsmem --summary` already reports 32G or more, skip this step.
 
 ## 9. Install TNMS Server and Mediation
 
-`TNMS.bin` rejects `-i console` (`Installer User Interface Mode Not Supported`). The media does not ship a silent response file. Run the GUI. `-r` writes a response file that contains the database passwords. Leave `/root/tnms-install.properties` on the server, and keep it out of git.
-
-On a graphical console:
-
-```bash
-cd /home/tnms-layout/installer/TNMS_Installer
-./TNMS.bin -i gui -r /root/tnms-install.properties
-```
-
-**This host** had no graphical console (`multi-user.target`, GNOME not installed). The same command was run under Xvfb:
+`TNMS.bin` rejects `-i console` (`Installer User Interface Mode Not Supported`). The media does not ship a silent response file. Run the GUI over SSH. The SSH session has no monitor, so the GUI runs on a virtual screen, Xvfb. `-r` writes a response file that contains the database passwords. Leave `/root/tnms-install.properties` on the server, and keep it out of git.
 
 ```bash
 dnf -y install xorg-x11-server-Xvfb dejavu-sans-fonts
@@ -878,9 +869,9 @@ import -window root -display :99 /tmp/tnms-gui/screen.png
 
 That command prints nothing. It writes `/tmp/tnms-gui/screen.png` on the server. Copy that file to the workstation and open it there. The picture is the wizard page that is on display `:99` right now. The title in the picture is `TNMS 9.1.0.593.0 Installer`. After each answer, run the same `import` command again and open the new file. Do not run `dnf` again.
 
-On this host the clicks were sent with `xdotool` from the second SSH session, with `DISPLAY=:99`. The first SSH session stayed inside `./TNMS.bin` until the wizard exited. `xdotool` is not required when the window is on a real monitor.
+On this host the clicks were sent with `xdotool` from the second SSH session, with `DISPLAY=:99`. The first SSH session stayed inside `./TNMS.bin` until the wizard exited.
 
-**Graphical console.** Skip every Xvfb command and run `./TNMS.bin` from a terminal on the desktop. The window opens on the monitor. In that case the same `ps` command prints nothing, because Xvfb was never started. An empty result is the finished check on that path. On the Xvfb path, an empty result means the virtual screen is not running, so start Xvfb again before `./TNMS.bin`.
+If `ps -C Xvfb -o args=` prints nothing, the virtual screen is not running. Start Xvfb again before `./TNMS.bin`.
 
 Answer the screens in this order:
 

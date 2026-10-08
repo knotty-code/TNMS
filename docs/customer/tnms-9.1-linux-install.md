@@ -375,7 +375,7 @@ chmod 744 ./TNMS.bin
 ./TNMS.bin
 ```
 
-This build rejects `-i console` (`Installer User Interface Mode Not Supported`). Run the GUI. On a host whose default target is `multi-user` and has no graphical session, run that GUI on a virtual display.
+This build rejects `-i console` (`Installer User Interface Mode Not Supported`). The install is an SSH session to a VM, so run the GUI on the Xvfb display in [install-log.md](install-log.md).
 
 InstallAnywhere measures free space on `/`, even when `/opt/nokia/tnms` is a bind mount on a larger disk. `/` needs about 5 GB free before **Install** is clicked. On this host `rootlv` was extended from 2 GB to 8 GB.
 
