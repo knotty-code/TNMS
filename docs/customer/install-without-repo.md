@@ -2,7 +2,7 @@
 
 Run this on a fresh Red Hat Enterprise Linux 8 server, as root, from top to bottom. It is the sequence that installed TNMS 9.1.0.593.0 Server and Mediation with Oracle 19c on 2026-10-08.
 
-Prepare the VM with [pre-install.md](pre-install.md) first. That guide mounts the 1 TB disk on `/opt`. Then run this guide. The wizard files and the three vendor zip files go in `/opt/tnms-install`.
+Prepare the VM with [pre-install.md](pre-install.md) first. That guide mounts the 1 TB disk on `/opt`. Then run this guide.
 
 One machine. Small Plus. TNMS Server and Mediation together. New database.
 
@@ -10,9 +10,55 @@ The TNMS client login follows the wizard-file section. The database and SFTP pas
 
 A line that says **Confirm by running** is a separate command. Run that command. The next **Expected output** block is what that command should print. Compare the two. A work command that prints nothing is finished when the shell prompt returns. Names and addresses below are this host. Sizes move with the disk. Replace `TNMS` and `172.16.0.4` with the site values.
 
+## Before you start
+
+Copy these five files to `/tmp` on the server before section 1. Do this from the workstation before hostname, packages, Oracle, or TNMS. `/tmp` is the 16 GB filesystem. The Oracle zip is about 5 GB. `/home` is about 1 GB, so leave these files out of `/home`.
+
+| Staged file | Path on the server |
+| --- | --- |
+| install-tnms-wizard.sh | /tmp/install-tnms-wizard.sh |
+| tnms-install.properties.in | /tmp/tnms-install.properties.in |
+| LINUX.X64_193000_db_home_and_patches.zip | /tmp/LINUX.X64_193000_db_home_and_patches.zip |
+| TNMS_LUX_R9.1.0.593.0_1904_Prerequisites.zip | /tmp/TNMS_LUX_R9.1.0.593.0_1904_Prerequisites.zip |
+| TNMS_LUX_R9.1.0.593.0_1904.zip | /tmp/TNMS_LUX_R9.1.0.593.0_1904.zip |
+
+From the workstation directory that contains the five files:
+
+```bash
+scp install-tnms-wizard.sh tnms-install.properties.in \
+  LINUX.X64_193000_db_home_and_patches.zip \
+  TNMS_LUX_R9.1.0.593.0_1904_Prerequisites.zip \
+  TNMS_LUX_R9.1.0.593.0_1904.zip \
+  <user>@<server-ip>:/tmp/
+```
+
+`<user>` is the SSH account. `<server-ip>` is the server address. The command finishes when all five files have been copied. `Permission denied` or `No such file` means stop and fix the path before continuing.
+
+**Confirm by running:**
+
+```bash
+ls -1 /tmp/install-tnms-wizard.sh \
+  /tmp/tnms-install.properties.in \
+  /tmp/LINUX.X64_193000_db_home_and_patches.zip \
+  /tmp/TNMS_LUX_R9.1.0.593.0_1904_Prerequisites.zip \
+  /tmp/TNMS_LUX_R9.1.0.593.0_1904.zip
+```
+
+**Expected output:**
+
+```text
+/tmp/install-tnms-wizard.sh
+/tmp/tnms-install.properties.in
+/tmp/LINUX.X64_193000_db_home_and_patches.zip
+/tmp/TNMS_LUX_R9.1.0.593.0_1904_Prerequisites.zip
+/tmp/TNMS_LUX_R9.1.0.593.0_1904.zip
+```
+
+Leave `tnms-install.properties.in` unchanged. Section 1 does not use these files. After step 4, **Copy the install files** moves them from `/tmp` to `/opt/tnms-install` as root.
+
 ## Where the install files go
 
-> Get `install-tnms-wizard.sh`, `tnms-install.properties.in`, and the three vendor zip files with this guide. Put them in `/opt/tnms-install` after the pre-install checks pass. The script reads the properties file from that same directory. One file without the other stops the script.
+> The five files are in `/tmp` from **Before you start**. After step 4 they move to the paths in this table. The script reads the properties file from `/opt/tnms-install`. One file without the other stops the script.
 
 | Wizard file | Path on the server |
 | --- | --- |
@@ -20,9 +66,9 @@ A line that says **Confirm by running** is a separate command. Run that command.
 | tnms-install.properties.in | /opt/tnms-install/tnms-install.properties.in |
 | Three vendor zip files | /opt/tnms-install/resources/ |
 
-`/opt` is the 1 TB volume from the pre-install guide. `/opt/oracle`, `/opt/nokia`, and `/opt/tnms-install` are directories on that volume. Copy the files after `df` shows `/opt` on `datavg-optlv`.
+`/opt` is the 1 TB volume from the pre-install guide. `/opt/oracle`, `/opt/nokia`, and `/opt/tnms-install` are directories on that volume. Move the five files from `/tmp` after `df` shows `/opt` on `datavg-optlv`.
 
-Keep both wizard file names. Leave `tnms-install.properties.in` unchanged. The script writes the server IPv4 into a separate response file, `/root/tnms-install.properties`. Database passwords stay in `/root/tnms-db-credentials` from step 6. Leave those passwords out of the properties file. Leave both wizard files out of the `TNMS.bin` directory. The copy commands are in **Copy the install files**, after step 4. Run the script in step 9.
+Keep both wizard file names. Leave `tnms-install.properties.in` unchanged. The script writes the server IPv4 into a separate response file, `/root/tnms-install.properties`. Database passwords stay in `/root/tnms-db-credentials` from step 6. Leave those passwords out of the properties file. Leave both wizard files out of the `TNMS.bin` directory. **Copy the install files**, after step 4, moves the five files from `/tmp` onto the paths above. Run the script in step 9.
 
 ## TNMS client login
 
@@ -70,7 +116,7 @@ Password rule used for `SYS`, `SYSTEM`, and `tnmsdba`: 6 to 30 characters from `
 
 ## Media to copy onto the server
 
-These three zip files are the Oracle and TNMS media. Copy them into `/opt/tnms-install/resources` with the wizard files, in **Copy the install files**.
+These three zip files are the Oracle and TNMS media. **Before you start** copies them to `/tmp` with the wizard files. **Copy the install files** then moves the zip files into `/opt/tnms-install/resources`.
 
 | File | Role |
 | --- | --- |
@@ -411,7 +457,7 @@ ls -d /opt/oradata/ora1 /opt/oradata/ora2 /opt/oradata/ora3 /opt/tnms-install/re
 
 Run this after the step 4 checks. `/opt/tnms-install` is on the 1 TB volume. `/tmp` is the 16 GB filesystem. The Oracle zip is about 5 GB.
 
-Copy the two wizard files and the three zip files to `/tmp` on the server. Any SSH user can receive that copy. `/home` is about 1 GB, so a VS Code Remote SSH connection needs the symlink in pre-install section 6 before it can unpack. The five install files still go to `/tmp`, not into `/home` and not directly into `/opt/tnms-install`. From the workstation directory that contains the five files:
+The five files should already be in `/tmp` from **Before you start**. Any SSH user can receive that copy. `/home` is about 1 GB, so a VS Code Remote SSH connection needs the symlink in pre-install section 6 before it can unpack. The five install files stay out of `/home` and are not copied straight into `/opt/tnms-install`. When a name is missing from `/tmp`, run this from the workstation directory that contains the five files:
 
 ```bash
 scp install-tnms-wizard.sh tnms-install.properties.in \
