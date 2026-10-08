@@ -6,6 +6,8 @@ One machine. Small Plus. TNMS Server and Mediation together. New database.
 
 Passwords are not in this file. Put them only in `/root/tnms-db-credentials` (mode 600) and in the site checklist. A step headed **This host** applies when the fresh server matches the condition in that step.
 
+Each step ends with **Confirm**. That block is the output that means the step is finished. A command that prints nothing is done when the next prompt returns and `echo $?` prints `0`. Names and addresses below are this host. Sizes move with the disk. Replace `TNMS` and `172.16.0.4` with the site values.
+
 The longer manual notes are in [tnms-9.1-linux-install.md](tnms-9.1-linux-install.md).
 
 ## Values used on this host
@@ -60,6 +62,8 @@ hostnamectl set-hostname TNMS
 localectl set-locale LANG=en_US.UTF-8
 ```
 
+Both commands print nothing.
+
 `/etc/hosts` needs the server address, the FQDN, and the short name:
 
 ```text
@@ -69,12 +73,24 @@ localectl set-locale LANG=en_US.UTF-8
 ```
 
 ```bash
+hostnamectl status
 hostname --fqdn
+getent hosts TNMS
 locale
 nisdomainname
+getenforce
 ```
 
-`hostname --fqdn` prints the FQDN. `LANG` is `en_US.UTF-8`. `nisdomainname` reports that the local domain name is not set. SELinux stays Enforcing.
+Confirm. `hostnamectl` shows the short name, and `hostname --fqdn` prints the FQDN. `locale` shows `LANG=en_US.UTF-8`. `nisdomainname` exits 1 with the text below. That exit code is the finished state. `getenforce` prints `Enforcing`.
+
+```text
+   Static hostname: TNMS
+TNMS.vmefr40i5gquree1lezspcyb0c.gx.internal.cloudapp.net
+172.16.0.4      TNMS.vmefr40i5gquree1lezspcyb0c.gx.internal.cloudapp.net TNMS
+LANG=en_US.UTF-8
+nisdomainname: Local domain name not set
+Enforcing
+```
 
 ## 2. Packages
 
@@ -85,7 +101,13 @@ dnf -y install attr bc elfutils-libelf-devel fontconfig-devel gcc gcc-c++ \
   unzip perl binutils glibc-devel
 ```
 
-`jemalloc` comes from EPEL. The Oracle installer checks `elfutils-libelf-devel`, `fontconfig-devel`, `libnsl`, `make`, `sysstat`, and `libXtst`.
+Confirm. Each `dnf` command ends with `Complete!` The EPEL transaction installs `epel-release`. The second transaction installs `jemalloc` from EPEL. Then:
+
+```bash
+rpm -q epel-release jemalloc elfutils-libelf-devel fontconfig-devel libnsl make sysstat libXtst unzip
+```
+
+Confirm. One line per package, and none of them says `is not installed`. On this host the `jemalloc` line was `jemalloc-5.2.1-3.el8.x86_64`. The Oracle installer checks `elfutils-libelf-devel`, `fontconfig-devel`, `libnsl`, `make`, `sysstat`, and `libXtst`.
 
 ## 3. Kernel settings and the firewall
 
@@ -102,7 +124,22 @@ vm.min_free_kbytes = 1048576
 sysctl --system
 systemctl stop firewalld
 systemctl disable firewalld
+systemctl is-enabled firewalld
+systemctl is-active firewalld
 systemctl is-active chronyd
+sysctl vm.swappiness vm.dirty_ratio vm.dirty_background_ratio vm.min_free_kbytes
+```
+
+Confirm. `sysctl --system` applies `/etc/sysctl.d/99-tnms.conf` and prints the four settings. `systemctl stop firewalld` prints nothing. `systemctl disable firewalld` prints `Removed /etc/systemd/system/multi-user.target.wants/firewalld.service.` The status commands then print:
+
+```text
+disabled
+inactive
+active
+vm.swappiness = 1
+vm.dirty_ratio = 15
+vm.dirty_background_ratio = 3
+vm.min_free_kbytes = 1048576
 ```
 
 `chronyd` is left as the image installed it (`pool 2.rhel.pool.ntp.org iburst` on this host). Firewalld stays off for the install window.
@@ -120,6 +157,15 @@ The Oracle installer and `TNMS.bin` need all of the following:
 df -h / /tmp
 findmnt -no OPTIONS /tmp
 swapon --show
+```
+
+Confirm before changing anything. `df` shows the free space on `/` and `/tmp`. `findmnt` lists the `/tmp` options. The word `noexec` is absent from that line. `swapon --show` is empty when the server has no swap yet. On this host, before the changes below, `/` was 2 GB, `/tmp` was 2 GB, and there was no swap. After the changes the same commands printed:
+
+```text
+/dev/mapper/rootvg-rootlv  8.0G  123M  7.9G   2% /
+/dev/mapper/rootvg-tmplv    16G  1.3G   15G   8% /tmp
+rw,relatime,seclabel,attr2,inode64,logbufs=8,logbsize=32k,noquota
+/home/tnms-layout/swapfile file  18G
 ```
 
 **This host.** `/` was a 2 GB logical volume and the 1 TB disk was `/home`. These are the commands that made the layout the installers accepted. Skip a command when that filesystem is already large enough. The volume names were `/dev/rootvg/rootlv` and `/dev/rootvg/tmplv`.
@@ -142,6 +188,8 @@ mkswap /home/tnms-layout/swapfile
 swapon /home/tnms-layout/swapfile
 ```
 
+Confirm. `lvextend` prints `successfully resized` for each volume, then the xfs grow messages. `mkdir` prints nothing. `dd` ends at 18 GB copied. `mkswap` prints `Setting up swapspace version 1, size = 18 GiB`. `swapon` prints nothing.
+
 Append these lines to `/etc/fstab`, then mount them:
 
 ```text
@@ -157,9 +205,23 @@ systemctl daemon-reload
 mount -a
 swapon --show
 df -h / /tmp /opt/oracle /opt/nokia /nokia /oradata
+findmnt /opt/oracle /opt/nokia /nokia /oradata
 ```
 
-On a fresh server whose `/` is already large, create the same four directories on `/` and skip the bind mounts and `lvextend`. Still create `ora1`, `ora2`, and `ora3` under `/oradata`.
+Confirm. `daemon-reload` and `mount -a` print nothing. `swapon` shows the 18G file. `df` shows `/` at about 8G with several GB free, `/tmp` at 16G, and the four product paths on the large filesystem. `findmnt` shows each of those four paths as a bind mount. On this host:
+
+```text
+NAME                       TYPE SIZE USED PRIO
+/home/tnms-layout/swapfile file  18G  4.8G   -2
+/dev/mapper/rootvg-rootlv  8.0G  123M  7.9G   2% /
+/dev/mapper/rootvg-tmplv    16G  1.3G   15G   8% /tmp
+/dev/mapper/rootvg-homelv  1.1T   92G  941G   9% /opt/oracle
+/dev/mapper/rootvg-homelv  1.1T   92G  941G   9% /opt/nokia
+/dev/mapper/rootvg-homelv  1.1T   92G  941G   9% /nokia
+/dev/mapper/rootvg-homelv  1.1T   92G  941G   9% /oradata
+```
+
+On a fresh server whose `/` is already large, create the same four directories on `/` and skip the bind mounts and `lvextend`. Still create `ora1`, `ora2`, and `ora3` under `/oradata`. `df -h /` then shows at least 8 GB available, and `findmnt` shows `/opt/oracle` on the root filesystem rather than as a bind.
 
 ## 5. Unpack the media
 
@@ -181,9 +243,26 @@ find /home/tnms-layout/prereq/TNMS_Prerequisites/Oracle -type f -exec chmod 644 
 find /home/tnms-layout/prereq/TNMS_Prerequisites/Oracle -name '*.sh' -exec chmod 755 {} \;
 chmod 744 /home/tnms-layout/installer/TNMS_Installer/TNMS.bin
 ls /opt/oracle/oramedia
+ls -l /home/tnms-layout/installer/TNMS_Installer/TNMS.bin \
+  /home/tnms-layout/prereq/TNMS_Prerequisites/Oracle/installation/installation.sh
 ```
 
-`/opt/oracle/oramedia` then contains the four zip members and nothing nested. `TNMS.bin` is `/home/tnms-layout/installer/TNMS_Installer/TNMS.bin`.
+Confirm. Each `unzip -t` ends with:
+
+```text
+No errors detected in compressed data of <zip path>.
+```
+
+`ls /opt/oracle/oramedia` prints the four members at the top of that directory:
+
+```text
+LINUX.X64_193000_db_home.zip
+p30869156_190000_Linux-x86-64.zip
+p30894985_190000_Linux-x86-64.zip
+p35775632_190000_Linux-x86-64.zip
+```
+
+The two `ls -l` lines show `TNMS.bin` mode `744` and `installation.sh` executable. `TNMS.bin` is `/home/tnms-layout/installer/TNMS_Installer/TNMS.bin`. An `unzip -t` that stops before `No errors detected` is an incomplete zip. Replace that file before continuing.
 
 The RHEL 9 script `verify-prerequisites/verify_prerequisites_tnms.sh` does not apply on RHEL 8. It was not run.
 
@@ -192,6 +271,8 @@ The RHEL 9 script `verify-prerequisites/verify_prerequisites_tnms.sh` does not a
 ```bash
 install -m 600 /dev/null /root/tnms-db-credentials
 ```
+
+`install` prints nothing.
 
 Edit that file so it contains three lines, using passwords that meet the rule above. Use a different value for `TNMSDBA_PASSWORD` than for the two Oracle accounts:
 
@@ -202,6 +283,20 @@ TNMSDBA_PASSWORD=<tnmsdba password>
 ```
 
 `SYS_PASSWORD` and `SYSTEM_PASSWORD` are what `installation.sh` asks for. `TNMSDBA_PASSWORD` is typed into the TNMS wizard later. The Oracle installer also creates OS user `orabackup` in group `dba`. Leave that account in `dba`.
+
+```bash
+stat -c '%a %U:%G' /root/tnms-db-credentials
+grep -E '^[A-Z_]+=' /root/tnms-db-credentials | cut -d= -f1
+```
+
+Confirm. The mode line is `600 root:root`. The key list is the three names, with no password values printed:
+
+```text
+600 root:root
+SYS_PASSWORD
+SYSTEM_PASSWORD
+TNMSDBA_PASSWORD
+```
 
 ## 7. Install Oracle 19c
 
@@ -224,14 +319,37 @@ cd /home/tnms-layout/prereq/TNMS_Prerequisites/Oracle/installation
   -systempwd="$SYSTEM_PASSWORD"
 ```
 
+Confirm. On a 16 GB server the log contains these lines, in this order, and the command still exits 0:
+
+```text
+Total memory:    16 GB
+Required memory: 32 GB
+Total swap:    18 GB
+Required swap: 16 GB
+Error checking requirements.
+vm.nr_hugepages: Current:0 New:3463
+Final status of the execution: Success
+```
+
+`Error checking requirements.` is the 32 GB memory check. With `-silent_mode=Y` the script continues. The step is finished only when the last of those lines is `Final status of the execution: Success`. This host reached that line at 02:46 UTC, about 23 minutes after the start, and the shell printed nothing further. `echo $?` is `0`.
+
 Then:
 
 ```bash
 grep TNMS /etc/oratab
 ss -ltn | grep 1521
+grep '^LISNER' /opt/oracle/product/19c/dbhome_1/network/admin/listener.ora
 ```
 
-Expect `TNMS:/opt/oracle/product/19c/dbhome_1:Y` and a listener on port 1521. The listener name in `listener.ora` is `LISNER`. Logs are `/home/oracle/ossnms_installation_log/oracle_installation_<timestamp>.log` and a copy under `/tmp`.
+Confirm:
+
+```text
+TNMS:/opt/oracle/product/19c/dbhome_1:Y
+LISTEN 0      400                0.0.0.0:1521       0.0.0.0:*
+LISNER =
+```
+
+The listener name in `listener.ora` is `LISNER`. Logs are `/home/oracle/ossnms_installation_log/oracle_installation_<timestamp>.log` and a copy under `/tmp`.
 
 The script applies the 19.7 patches that are inside the Oracle zip: `30869156` (Database Release Update 19.7.0.0.200414) and `30894985` (OCW 19.7.0.0.0). It also sets huge pages (`vm.nr_hugepages = 3463` for this 16 GB server).
 
@@ -257,9 +375,20 @@ exec /usr/bin/lsmem.real "$@"
 EOF
 chmod 755 /usr/bin/lsmem
 lsmem --summary
+file /usr/bin/lsmem /usr/bin/lsmem.real
 ```
 
-The summary line must be `Total online memory:      32G`. On a server where `lsmem --summary` already reports 32G or more, skip this step.
+Confirm. `lsmem --summary` prints the three lines in the wrapper, and `file` shows a shell script in front of the saved ELF binary:
+
+```text
+Memory block size:       128M
+Total online memory:      32G
+Total offline memory:      0B
+/usr/bin/lsmem:      Bourne-Again shell script, ASCII text executable
+/usr/bin/lsmem.real: ELF 64-bit LSB shared object, x86-64
+```
+
+On a server where `lsmem --summary` already reports 32G or more, skip this step. That server's `lsmem` line from `file` stays `ELF 64-bit`.
 
 ## 9. Install TNMS Server and Mediation
 
@@ -285,7 +414,17 @@ cd /home/tnms-layout/installer/TNMS_Installer
 ./TNMS.bin -i gui -r /root/tnms-install.properties -tempdir /tmp/tnms-gui
 ```
 
-Someone has to see display `:99` and answer the screens. A serial console or an SSH session does not show it.
+Confirm the display before answering screens. `ps` shows Xvfb, and the installer window title is `TNMS 9.1.0.593.0 Installer`.
+
+```bash
+ps -C Xvfb -o args=
+```
+
+```text
+Xvfb :99 -screen 0 1400x900x24 -ac +extension GLX +render -noreset
+```
+
+Someone has to see display `:99` and answer the screens. A serial console or an SSH session does not show it. On a graphical console the same window opens without Xvfb, and `ps -C Xvfb` prints nothing.
 
 Answer the screens in this order:
 
@@ -334,9 +473,23 @@ Oracle 19.7 returns `ORA-02065: illegal option for ALTER SYSTEM`. The SQL tool c
 
 ```bash
 . /etc/profile.d/ossnms.sh
+echo $?
+getent passwd tnms tnms_sftp
+systemctl is-enabled scs_daemon
+test -d /opt/nokia/tnms/server && test -d /nokia/tnms && echo TNMS_FILES_OK
 ```
 
-The leading dot is required.
+The leading dot is required. Confirm. The source command prints nothing and `echo $?` prints `0`. The users exist, the service unit is enabled, and the product directories are present:
+
+```text
+0
+tnms:x:<uid>:<gid>::/opt/nokia/tnms:/bin/bash
+tnms_sftp:x:<uid>:<gid>::/nokia/tnms/nedata:/bin/bash
+enabled
+TNMS_FILES_OK
+```
+
+The numeric ids differ by server. The homes and the `tnms` shell are the check. `tnms_sftp` still has `/bin/bash` here. Step 11 changes that shell to `/sbin/nologin`.
 
 ## 10. Put lsmem back
 
@@ -345,9 +498,17 @@ Run this after the `TNMS.bin` process has exited, and only if step 8 installed t
 ```bash
 mv -f /usr/bin/lsmem.real /usr/bin/lsmem
 lsmem --summary
+file /usr/bin/lsmem
 ```
 
-`Total online memory` again shows the real size (16G on this host). `/usr/bin/lsmem` is the ELF binary, dated with the OS, not a shell script.
+Confirm. The summary shows the real RAM, and `file` no longer says shell script. On this host:
+
+```text
+Memory block size:       128M
+Total online memory:      16G
+Total offline memory:      0B
+/usr/bin/lsmem: ELF 64-bit LSB shared object, x86-64, version 1 (SYSV), dynamically linked, interpreter /lib64/ld-linux-x86-64.so.2, for GNU/Linux 3.2.0, BuildID[sha1]=aa4bf18057211264f0eac86aa499369a1081724f, stripped
+```
 
 ## 11. SFTP account
 
@@ -358,6 +519,19 @@ lsmem --summary
 usermod -s /sbin/nologin tnms_sftp
 chown root:root /nokia
 chmod 755 /nokia
+passwd -S tnms
+passwd -S tnms_sftp
+getent passwd tnms_sftp
+stat -c '%a %U:%G' /nokia
+```
+
+Confirm. `passwd` ends with `passwd: all authentication tokens updated successfully.` `usermod`, `chown`, and `chmod` print nothing. The checks then print:
+
+```text
+tnms LK <date> -1 -1 -1 -1 (Password locked.)
+tnms_sftp PS <date> -1 -1 -1 -1 (Password set, SHA512 crypt.)
+tnms_sftp:x:<uid>:<gid>::/nokia/tnms/nedata:/sbin/nologin
+755 root:root
 ```
 
 In `/etc/ssh/sshd_config`, comment the external sftp subsystem and add the internal one:
@@ -380,11 +554,24 @@ Match User tnms_sftp
 
 ```bash
 sshd -t
+echo $?
 systemctl restart sshd
+systemctl is-active sshd
 sshd -T -C user=tnms_sftp,host=127.0.0.1,addr=127.0.0.1 | grep -E 'chrootdirectory|forcecommand|passwordauthentication'
+sshd -T -C user=azureuser,host=127.0.0.1,addr=127.0.0.1 | grep -E 'chrootdirectory|passwordauthentication'
 ```
 
-Expect `chrootdirectory /nokia`, `forcecommand internal-sftp`, and `passwordauthentication yes`. An SFTP login as `tnms_sftp` lists the directory `tnms`. An SSH shell login is refused with `This service allows sftp connections only.`
+Confirm. `sshd -t` prints nothing and `echo $?` prints `0`. `systemctl restart sshd` prints nothing and `is-active` prints `active`. The two `sshd -T` checks print:
+
+```text
+passwordauthentication yes
+forcecommand internal-sftp
+chrootdirectory /nokia
+passwordauthentication no
+chrootdirectory none
+```
+
+The second pair is the administrator account. Its name on this host is `azureuser`. Use the site admin name in that `-C user=` argument. An SFTP login as `tnms_sftp` lists the directory `tnms` and `pwd` prints `/`. An SSH shell login as `tnms_sftp` is refused with `This service allows sftp connections only.`
 
 FTP stays off. `vsftpd` was not enabled.
 
@@ -397,10 +584,19 @@ cp -p /opt/nokia/tnms/system/install/resources/system/tnms_sudo /etc/sudoers.d/t
 chown root:root /etc/sudoers.d/tnms_sudo
 chmod 440 /etc/sudoers.d/tnms_sudo
 visudo -cf /etc/sudoers.d/tnms_sudo
+stat -c '%a %U:%G' /etc/sudoers.d/tnms_sudo
 sudo -l -U tnms
 ```
 
-The shipped file is mode 640, group `tnms`. Mode 440 is what this host uses. `sudo -l -U tnms` lists `systemctl` for `scs_daemon.service`, `scs_daemon`, `emsstarterdaemon.sh`, and `database.sh`.
+Confirm. `cp`, `chown`, and `chmod` print nothing. `visudo` prints one line. The mode is `440 root:root`. `sudo -l` lists the four commands:
+
+```text
+/etc/sudoers.d/tnms_sudo: parsed OK
+440 root:root
+    (root) NOPASSWD: /usr/bin/systemctl * scs_daemon.service, /opt/nokia/tnms/system/services/bin/scs_daemon, /opt/nokia/tnms/system/admin/emsstarterdaemon.sh, /opt/nokia/tnms/system/admin/database.sh
+```
+
+The shipped file is mode 640, group `tnms`. Mode 440 is what this host uses.
 
 ## 13. Start the service
 
@@ -408,14 +604,28 @@ The wizard enables `scs_daemon.service` and leaves it stopped. On this host the 
 
 ```bash
 restorecon -RF /opt/nokia
+ls -Z /opt/nokia/tnms/system/services/bin/scs_daemon
 systemctl reset-failed scs_daemon.service
 systemctl start scs_daemon
+echo $?
 systemctl is-active scs_daemon
-ss -ltnp | grep 8444
-curl -k -sI https://127.0.0.1:8444 | head -n 5
+ss -ltn | grep 8444
+curl -k -sI https://127.0.0.1:8444 | head -n 8
 ```
 
-Expect `active`, NGINX listening on `0.0.0.0:8444`, and HTTP 301 to `/tnms-webclient`. Port 8444 was left at the product default.
+Confirm. `restorecon` prints a line for each file it relabels, or nothing when the labels are already right. `ls -Z` shows `bin_t` on `scs_daemon`. `reset-failed` and `start` print nothing, and `echo $?` prints `0`. The rest is:
+
+```text
+system_u:object_r:bin_t:s0 /opt/nokia/tnms/system/services/bin/scs_daemon
+0
+active
+LISTEN 0      511                0.0.0.0:8444       0.0.0.0:*
+HTTP/1.1 301 Moved Permanently
+Server: openresty
+Location: https://127.0.0.1:8444/tnms-webclient
+```
+
+Port 8444 was left at the product default. A start that prints `status=203/EXEC` means the `bin_t` label is missing. Run the `restorecon` again and then `systemctl reset-failed` and `systemctl start`. The service takes about a minute to open port 8444 after `is-active` already says `active`.
 
 Startup logs can say `LD_PRELOAD` of `libjemalloc.so` cannot be preloaded. `jemalloc-5.2.1-3.el8` was installed and the processes still started.
 
