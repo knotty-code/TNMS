@@ -87,6 +87,35 @@ Also done before the database installer:
 
 The separate security-patch script in the prerequisites tree expects later patch zips (`p6880880`, `p38629535`, `p38586770`, `p38523609`). Those files are not in the media we have. The database installer already applied the 19.7 patches that shipped inside `LINUX.X64_193000_db_home_and_patches (1).zip`.
 
+## TNMS Server and Mediation, started 2026-10-08 02:59 UTC
+
+`TNMS.bin` is InstallAnywhere. This build rejects `-i console` (`Installer User Interface Mode Not Supported`). Silent mode needs a response file, and the media does not ship one. The wizard is running as GUI on Xvfb display `:99`, with `-r /root/tnms-install.properties`.
+
+Choices entered:
+
+| Screen | Choice |
+| --- | --- |
+| License | accepted |
+| Installation package | TNMS Server and Mediation |
+| Transport Controller | left disabled |
+| Hardware | Small Plus |
+| Users, groups, directories | installer defaults |
+| Database | New |
+| Connection | `127.0.0.1:1521`, user `tnmsdba`, SID `TNMS`, Oracle home `/opt/oracle/product/19c/dbhome_1` |
+| Advisory message | disabled |
+| Managers | Ethernet, ASON, Optical, Optical Spectrum Insight. ZTC left off |
+| Frontend servers | none |
+| Northbound interfaces | none |
+| Network elements | Generic SNMP only |
+| Summary | install `/opt/nokia/tnms`, data `/nokia/tnms`, IP `172.16.0.4`, set Server+Mediation, user `tnms`, group `tnms`, SFTP user `tnms_sftp` |
+
+Two host changes were required before the copy started:
+
+- The Small Plus page warns that the host does not have 32 GB of RAM and returns to that page. For this stand-up, `/usr/bin/lsmem` was wrapped so `lsmem --summary` reports `Total online memory: 32G`. The real binary is `/usr/bin/lsmem.real`. Remove the wrapper when the wizard is finished.
+- InstallAnywhere measures free space on `/`, not on the bind mount. `/` was 2 GB. `rootlv` was extended from 2 GB to 8 GB so the check could pass. The product files go to the `/opt/nokia` and `/nokia` bind mounts on the 1 TB disk.
+
+`db_setup.sh` exited 2. The SQL log records `ORA-02065` on `alter system set "_bug33046179_kqr_hot_copy_sleep_limit"=0`. That parameter is not valid on the 19.7 database this media installed. The installer logged `Fatal Exception: Error in db_setup.sh` and then continued into the merge-module copy. The wizard was at 38 percent and still running when this note was written. Passwords remain only in `/root/tnms-db-credentials`.
+
 ## Not done yet
 
-TNMS Server and Mediation installation with `TNMS.bin`.
+Wait for `TNMS.bin` to finish, then the SFTP account, the sudoers drop-in, and the NGINX 8444 check. Restore `/usr/bin/lsmem` after the wizard exits.
