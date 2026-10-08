@@ -816,7 +816,7 @@ export LANG=en_US.UTF-8
 
 Those commands print nothing.
 
-**Open a second SSH session before the next command.** `./TNMS.bin` does not return until the wizard exits. The SSH window that starts it sits there with no prompt. From the workstation, open a new SSH connection to this same server and log in as root. That new connection is the second shell. Leave both connections open. Do not type in the first one, and do not close it. Every check and every screenshot below runs in the second shell.
+**Open a second SSH session before the next command.** `./TNMS.bin` does not return until the wizard exits. The SSH window that starts it sits there with no prompt. From the workstation, open a new SSH connection to this same server and log in as root. That new connection is the second shell. Leave both connections open. Do not type in the first one, and do not close it. Every check and every screenshot below runs in the second shell. Keep a third window on the workstation, a terminal that is not logged into the server. That third window is only for downloading each picture.
 
 ```bash
 cd /home/tnms-layout/installer/TNMS_Installer
@@ -845,9 +845,11 @@ This command does not open the installer. It prints the command line of the virt
 - `-ac` lets another program on this server read the screen. That is what makes the screenshot command below work.
 - A line that matches means the screen is up. The shell redirection `>/tmp/tnms-gui/xvfb.log` and the `&` are absent here. Those belong to the shell that started Xvfb, and they are not part of the process command line.
 
-Both SSH sessions show only text. The wizard is a window on display `:99`, so it does not appear in either session. The serial console is text as well. Answers are clicks and typed fields on `:99`. Text entered at either shell prompt stays in that shell.
+Both SSH sessions show only text. The wizard is a picture on display `:99`. You see a page by saving that picture in the second SSH session, downloading the file to the workstation, and opening the file there. The numbered list below is the questions. The picture tells you which number you are on.
 
-The way to see that window is to save it as a PNG file, then open the file on the workstation. The program that saves the picture is `import`. It is not installed yet. It comes from the ImageMagick package. Install that package once, in the second SSH session:
+If `ps -C Xvfb -o args=` prints nothing, the virtual screen is not running. Start Xvfb again before `./TNMS.bin`.
+
+Install the picture program once. In the second SSH session:
 
 ```bash
 dnf -y install ImageMagick
@@ -861,19 +863,48 @@ The command ends with:
 Complete!
 ```
 
-`dnf` only installs the program. It does not take the picture. This is the command that writes the picture, still in the second SSH session:
+`dnf` installs `import`. It does not take a picture. Do not run `dnf` again.
+
+**For every wizard page, use these three windows in this order.**
+
+1. Second SSH session. Save the page and let the workstation read the file:
 
 ```bash
 import -window root -display :99 /tmp/tnms-gui/screen.png
+chmod 644 /tmp/tnms-gui/screen.png
 ```
 
-That command prints nothing. It writes `/tmp/tnms-gui/screen.png` on the server. Copy that file to the workstation and open it there. The picture is the wizard page that is on display `:99` right now. The title in the picture is `TNMS 9.1.0.593.0 Installer`. After each answer, run the same `import` command again and open the new file. Do not run `dnf` again.
+Both commands print nothing.
 
-On this host the clicks were sent with `xdotool` from the second SSH session, with `DISPLAY=:99`. The first SSH session stayed inside `./TNMS.bin` until the wizard exited.
+**Confirm by running,** in the second SSH session:
 
-If `ps -C Xvfb -o args=` prints nothing, the virtual screen is not running. Start Xvfb again before `./TNMS.bin`.
+```bash
+ls -l /tmp/tnms-gui/screen.png
+```
 
-Answer the screens in this order:
+**Expected output:**
+
+The line includes `-rw-r--r--` and `/tmp/tnms-gui/screen.png`. The size is not `0`.
+
+2. Workstation terminal. This is the third window. It is on your computer, and it is not logged into the server. If the prompt is a prompt on the server, this is the wrong window. Download the picture. Use the site admin name and the site address. On this host:
+
+```bash
+scp azureuser@172.16.0.4:/tmp/tnms-gui/screen.png .
+```
+
+**Expected output:**
+
+The transfer reaches `100%`. The workstation directory where you ran `scp` now contains `screen.png`. Each download replaces that file. Close the old picture before you open the new one, or the viewer can keep showing the previous page.
+
+3. On the workstation, open `screen.png` in an image viewer. The picture is one wizard page. The title is `TNMS 9.1.0.593.0 Installer`. Read the words on the page. Find that same page in the numbered list below. The text under that number is the required answer.
+
+Clicking the downloaded picture does nothing. The picture is only how you see the page. On this host the click or the typed value was sent with `xdotool` from the second SSH session, with `DISPLAY=:99`. The first SSH session stays inside `./TNMS.bin` and is not where answers are typed.
+
+After the answer, start again at action 1. Download the new picture and open it. The new picture must show the next page before you use the next number. If it shows the same page, the answer did not land. Send the answer again, then take another picture.
+
+Stop when the first SSH session returns to a shell prompt.
+
+The pages, in order:
 
 1. License. Accept the terms.
 2. PDT warning (`Check for available PDTs`, folder `TNMS_Installer/PUs`). Dismiss it when `PUs/` is empty.
@@ -904,7 +935,7 @@ Answer the screens in this order:
 | Managers | Ethernet, ASON, Optical, Optical Spectrum Insight |
 | Network elements | EM-MVM / Generic SNMP |
 
-If a firewall warning appears, firewalld is still running. Stop it and continue. If the wizard says a user or group already exists, stop and remove only the name it prints. Leave `oracle` and `orabackup` in place.
+A picture can also show a dialog that is not one of those 14 pages. Use the same three windows for it: save, download, open, then answer. If a firewall warning appears, firewalld is still running. Stop it and continue. If the wizard says a user or group already exists, stop and remove only the name it prints. Leave `oracle` and `orabackup` in place.
 
 The copy on this host then stopped on **Not Enough Disk Space** (4,530.80 MB required on `/opt/nokia/tnms`, 1,959.78 MB reported). That number is the free space of `/`. Step 4 is what clears it. After growing `rootlv` to 8 GB the next page was **Enough Disk Space**. **Install** was clicked again and the copy started.
 
