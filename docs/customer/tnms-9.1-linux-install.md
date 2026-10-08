@@ -1,6 +1,6 @@
 # TNMS 9.1 on Linux — installation we are following
 
-**Status: blocked on the Oracle media.** The planned procedure is below. What we have actually done on this host is in [install-log.md](install-log.md).
+**Status: Oracle media is complete. Install has not been started.** The planned procedure is below. What we have actually done on this host is in [install-log.md](install-log.md).
 
 This is the path for one physical machine, **Small Plus**, **RHEL**, with **TNMS Server and TNMS Mediation on that same machine**. A customer who repeats these steps, with their own site values, gets the same install.
 

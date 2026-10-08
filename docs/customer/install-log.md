@@ -33,17 +33,20 @@ Archives live in `/home/azureuser/TNMS/resources/` and are gitignored.
 | `TNMS_LUX_R9.1.0.593.0_1904_Prerequisites.zip` | End-of-archive record and earlier CRC test | Pass. Contains `installation.sh` and the Small Plus database template. |
 | `TNMS_WIN_R9.1.0.593.0_1904.zip` | `unzip -t` | Pass. Windows client. Not used on this host. |
 | `CuDo R9.1.zip` | `unzip -t` | Pass. Customer documentation. |
-| `LINUX.X64_193000_db_home_and_patches.zip` | End-of-archive record, then a walk of the local members | Fail. 3.7 GB, no end record. Transfer stopped 2026-10-08 00:04 UTC. |
+| `LINUX.X64_193000_db_home_and_patches.zip` | End-of-archive record, then a walk of the local members | Fail. 3.7 GB, no end record. Left in place. |
+| `LINUX.X64_193000_db_home_and_patches (1).zip` | End-of-archive record and member checksums, 2026-10-08 02:17 UTC | Pass. 5.0 GB. This is the bundle to install from. |
 
 The database installer on RHEL 8 waits until these three members exist in `/opt/oracle/oramedia` and match these MD5 checksums from `installation.sh`:
 
-| Member | Required MD5 | In the file we have |
+The first copy failed as follows. The `(1)` copy replaced every row with a matching checksum.
+
+| Member | Required MD5 | First copy |
 | --- | --- | --- |
 | `LINUX.X64_193000_db_home.zip` | `1858bd0d281c60f4ddabd87b1c214a4f` | Complete. Checksum matches. |
 | `p30869156_190000_Linux-x86-64.zip` | `f949a2bc8c5b1e01fd24ebee8c7feebe` | 879,020,465 of 1,215,493,402 bytes. |
 | `p30894985_190000_Linux-x86-64.zip` | `f750a50f3e3f6a91bd4bc2e13c7a021b` | Not present. |
 
-Unzipping the bundle does not create the missing patch. A finished bundle is larger than 4.3 GB, which is the size of the first two members before the third zip. The next check is `unzip -t` on the retransferred file, then the MD5 values above.
+The retransfer arrived as `LINUX.X64_193000_db_home_and_patches (1).zip` at 02:14 UTC. All four members are complete and match the installer checksums, including `p35775632_190000_Linux-x86-64.zip` (`0428e0284fdc98e04971c565d0a7fd49`), which the installer uses only on RHEL 9. The original 3.7 GB file is still the failed copy. Use the `(1)` file.
 
 ## Not done yet
 
