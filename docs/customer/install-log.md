@@ -856,7 +856,7 @@ This command does not open the installer. It prints the command line of the virt
 
 Both SSH sessions show only text. The wizard is a window on display `:99`, so it does not appear in either session. The serial console is text as well. Answers are clicks and typed fields on `:99`. Text entered at either shell prompt stays in that shell.
 
-Still in the second SSH session, take a picture of the current page:
+The way to see that window is to save it as a PNG file, then open the file on the workstation. The program that saves the picture is `import`. It is not installed yet. It comes from the ImageMagick package. Install that package once, in the second SSH session:
 
 ```bash
 dnf -y install ImageMagick
@@ -870,11 +870,13 @@ The command ends with:
 Complete!
 ```
 
+`dnf` only installs the program. It does not take the picture. This is the command that writes the picture, still in the second SSH session:
+
 ```bash
 import -window root -display :99 /tmp/tnms-gui/screen.png
 ```
 
-That command prints nothing. Open `/tmp/tnms-gui/screen.png`. The picture is the wizard page that is on display `:99` right now. Take a new picture after each answer. The title in the picture is `TNMS 9.1.0.593.0 Installer`.
+That command prints nothing. It writes `/tmp/tnms-gui/screen.png` on the server. Copy that file to the workstation and open it there. The picture is the wizard page that is on display `:99` right now. The title in the picture is `TNMS 9.1.0.593.0 Installer`. After each answer, run the same `import` command again and open the new file. Do not run `dnf` again.
 
 On this host the clicks were sent with `xdotool` from the second SSH session, with `DISPLAY=:99`. The first SSH session stayed inside `./TNMS.bin` until the wizard exited. `xdotool` is not required when the window is on a real monitor.
 
