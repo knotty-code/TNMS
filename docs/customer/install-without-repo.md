@@ -1,14 +1,74 @@
-# TNMS 9.1 on RHEL 8 — commands in order
+# TNMS 9.1 on RHEL 8 — install without this repository
 
 Run this on a fresh Red Hat Enterprise Linux 8 server, as root, from top to bottom. It is the sequence that installed TNMS 9.1.0.593.0 Server and Mediation with Oracle 19c on 2026-10-08.
 
+Do not clone this repository onto the server. Copy the two wizard files in the next section into `/root/tnms-wizard/`, and copy the three vendor zip files into `/home/tnms-layout/resources`.
+
 One machine. Small Plus. TNMS Server and Mediation together. New database.
 
-The TNMS client login is the first section below. The database and SFTP passwords are in the table after that. Write the database passwords into `/root/tnms-db-credentials` (mode 600). A step headed **This host** applies when the fresh server matches the condition in that step.
+The TNMS client login follows the wizard-file section. The database and SFTP passwords are in the table after that. Write the database passwords into `/root/tnms-db-credentials` (mode 600). A step headed **This host** applies when the fresh server matches the condition in that step.
 
 A line that says **Confirm by running** is a separate command. Run that command. The next **Expected output** block is what that command should print. Compare the two. A work command that prints nothing is finished when the shell prompt returns. Names and addresses below are this host. Sizes move with the disk. Replace `TNMS` and `172.16.0.4` with the site values.
 
-The longer manual notes are in [tnms-9.1-linux-install.md](tnms-9.1-linux-install.md).
+## Copy the wizard files onto the server
+
+> Get `install-tnms-wizard.sh` and `tnms-install.properties.in` with this guide. Put both files in `/root/tnms-wizard/` before step 9. The script reads the properties file from that same directory. One file without the other stops the script.
+
+| Wizard file | Mode |
+| --- | --- |
+| `install-tnms-wizard.sh` | `700` |
+| `tnms-install.properties.in` | `600` |
+
+Both files go in `/root/tnms-wizard/`. Keep both file names. Do not edit `tnms-install.properties.in`. The script writes the server IPv4 into a separate response file, `/root/tnms-install.properties`. Database passwords stay in `/root/tnms-db-credentials` from step 6. Do not type those passwords into the properties file. Do not copy either wizard file next to `TNMS.bin`.
+
+Copy the two files to `/tmp` on the server. Any SSH user can receive that copy. From the workstation directory that contains the two files:
+
+```bash
+scp install-tnms-wizard.sh tnms-install.properties.in <user>@<server-ip>:/tmp/
+```
+
+`<user>` is the SSH account. `<server-ip>` is the server address. The command finishes when both files have been copied. `Permission denied` or `No such file` means stop and fix the path before continuing.
+
+On the server, as root:
+
+```bash
+install -d -m 700 /root/tnms-wizard
+install -o root -g root -m 700 /tmp/install-tnms-wizard.sh /root/tnms-wizard/install-tnms-wizard.sh
+install -o root -g root -m 600 /tmp/tnms-install.properties.in /root/tnms-wizard/tnms-install.properties.in
+rm -f /tmp/install-tnms-wizard.sh /tmp/tnms-install.properties.in
+```
+
+`install` prints nothing. `rm` prints nothing. The `/tmp` copies are removed so the properties file remains only under `/root/tnms-wizard/`.
+
+**Confirm by running:**
+
+```bash
+ls -l /root/tnms-wizard
+```
+
+**Expected output:**
+
+Both names are listed. The modes are the check. Sizes and dates follow the files you copied. On RHEL the mode column ends with a dot. The first line is `total`.
+
+```text
+total <n>
+-rwx------. 1 root root <size> <date> install-tnms-wizard.sh
+-rw-------. 1 root root <size> <date> tnms-install.properties.in
+```
+
+**Confirm by running:**
+
+```bash
+grep -c '@TNMS_IP@' /root/tnms-wizard/tnms-install.properties.in
+```
+
+**Expected output:**
+
+```text
+7
+```
+
+`7` is the seven address fields the script fills in. `0` means this is the wrong file, or the file was edited. Replace it with the delivered `tnms-install.properties.in` and run the `install` commands again. Do not run `/root/tnms-wizard/install-tnms-wizard.sh` until step 9.
 
 ## TNMS client login
 
@@ -49,13 +109,19 @@ Substitute the site address and names. Keep the paths and the SID unless the sit
 | `tnmsdba` password | `Tnc25xQ36XBUa9` |
 | `tnms_sftp` password | `Tsvb5-Xe8ou3wR9` |
 | Large-disk directory | `/home/tnms-layout` (the big filesystem on this host was `/home`) |
-| Media directory | `/home/azureuser/TNMS/resources` |
+| Media directory | `/home/tnms-layout/resources` |
 
 Password rule used for `SYS`, `SYSTEM`, and `tnmsdba`: 6 to 30 characters from `a-z`, `A-Z`, `0-9`, and `+ - _ { }`. `SYS` and `SYSTEM` are the same value. `tnmsdba` is a different value. The SFTP password is separate again.
 
 ## Media to copy onto the server
 
-Put these three zip files on the large filesystem. On this host that directory was `/home/azureuser/TNMS/resources`.
+Put these three zip files in `/home/tnms-layout/resources` on the large filesystem. These zips are the Oracle and TNMS media. `install-tnms-wizard.sh` and `tnms-install.properties.in` are still required, in `/root/tnms-wizard/`.
+
+```bash
+mkdir -p /home/tnms-layout/resources
+```
+
+That command prints nothing. Copy the three zip files into that directory before step 5.
 
 | File | Role |
 | --- | --- |
@@ -480,7 +546,7 @@ On a fresh server whose `/` is already large, create the same four directories o
 `MEDIA` is the directory that holds the three zip files.
 
 ```bash
-MEDIA=/home/azureuser/TNMS/resources
+MEDIA=/home/tnms-layout/resources
 ```
 
 That assignment prints nothing. The three tests below use it. An `unzip -t` that stops before `No errors detected` is an incomplete zip. Replace that file before continuing.
@@ -496,7 +562,7 @@ unzip -t "$MEDIA/LINUX.X64_193000_db_home_and_patches.zip"
 The last line is:
 
 ```text
-No errors detected in compressed data of /home/azureuser/TNMS/resources/LINUX.X64_193000_db_home_and_patches.zip.
+No errors detected in compressed data of /home/tnms-layout/resources/LINUX.X64_193000_db_home_and_patches.zip.
 ```
 
 **Confirm by running:**
@@ -510,7 +576,7 @@ unzip -t "$MEDIA/TNMS_LUX_R9.1.0.593.0_1904.zip"
 The last line is:
 
 ```text
-No errors detected in compressed data of /home/azureuser/TNMS/resources/TNMS_LUX_R9.1.0.593.0_1904.zip.
+No errors detected in compressed data of /home/tnms-layout/resources/TNMS_LUX_R9.1.0.593.0_1904.zip.
 ```
 
 **Confirm by running:**
@@ -524,7 +590,7 @@ unzip -t "$MEDIA/TNMS_LUX_R9.1.0.593.0_1904_Prerequisites.zip"
 The last line is:
 
 ```text
-No errors detected in compressed data of /home/azureuser/TNMS/resources/TNMS_LUX_R9.1.0.593.0_1904_Prerequisites.zip.
+No errors detected in compressed data of /home/tnms-layout/resources/TNMS_LUX_R9.1.0.593.0_1904_Prerequisites.zip.
 ```
 
 ```bash
@@ -751,12 +817,12 @@ Small Plus refuses to continue until `lsmem --summary` reports at least 32G. Thi
 
 `TNMS.bin` rejects `-i console` (`Installer User Interface Mode Not Supported`). The recorded run wrote a response file, and that file sets `INSTALLER_UI=silent`. One script replays those choices. There is no second SSH session and no screenshot. To answer the screens yourself from two SSH sessions, use [Manual step 9](#manual-step-9-two-ssh-sessions) at the bottom of this guide instead of the script. Do not do both.
 
-The script is `scripts/install-tnms-wizard.sh` in this repository. It reads `SYS_PASSWORD` and `TNMSDBA_PASSWORD` from `/root/tnms-db-credentials`, writes the server IPv4 into the response file, and runs `TNMS.bin -f /root/tnms-install.properties`. On a host with less than 32 GB it installs the `lsmem` wrapper for that run and removes the wrapper before it exits. It refuses to start when `/opt/nokia/tnms/server` already exists.
+The script is `/root/tnms-wizard/install-tnms-wizard.sh`, in the same directory as `tnms-install.properties.in`. Both files were copied in **Copy the wizard files onto the server**. If either file is missing, stop and complete that section. The script reads `SYS_PASSWORD` and `TNMSDBA_PASSWORD` from `/root/tnms-db-credentials`, writes the server IPv4 into the response file, and runs `TNMS.bin -f /root/tnms-install.properties`. On a host with less than 32 GB it installs the `lsmem` wrapper for that run and removes the wrapper before it exits. It refuses to start when `/opt/nokia/tnms/server` already exists.
 
-Run it as root, in the same SSH session. On this host the repository is `/home/azureuser/TNMS`. A server that does not have this repository follows `docs/customer/install-without-repo.md`: copy `install-tnms-wizard.sh` and `tnms-install.properties.in` into `/root/tnms-wizard/`, then run `/root/tnms-wizard/install-tnms-wizard.sh`.
+Run it as root, in the same SSH session:
 
 ```bash
-/home/azureuser/TNMS/scripts/install-tnms-wizard.sh
+/root/tnms-wizard/install-tnms-wizard.sh
 ```
 
 The command prints the address it wrote, then the installer log. The run takes about the same time as the wizard on this host, which was 02:59 to 03:26 UTC.
@@ -821,7 +887,7 @@ Oracle 19.7 returns `ORA-02065: illegal option for ALTER SYSTEM`. The SQL tool c
 To see the response file without starting the installer:
 
 ```bash
-/home/azureuser/TNMS/scripts/install-tnms-wizard.sh --dry-run
+/root/tnms-wizard/install-tnms-wizard.sh --dry-run
 ```
 
 **Expected output:**
@@ -1278,7 +1344,7 @@ The first install runs for 90 days on a trial license. License keys after that, 
 
 ## Manual step 9: two SSH sessions
 
-> **Use this section only to configure step 9 yourself, remotely, with two SSH sessions.** Step 9 above runs `scripts/install-tnms-wizard.sh` and does not use these commands. Do not run the script and this section on the same server. If `/opt/nokia/tnms/server` already exists, the wizard has already been installed.
+> **Use this section only to configure step 9 yourself, remotely, with two SSH sessions.** Step 9 above runs `/root/tnms-wizard/install-tnms-wizard.sh` and does not use these commands. Do not run the script and this section on the same server. If `/opt/nokia/tnms/server` already exists, the wizard has already been installed.
 
 `TNMS.bin` rejects `-i console`. The SSH session has no monitor, so the GUI runs on a virtual screen. You keep two SSH sessions open on the server, and a third window on the workstation that is not logged into the server. The first SSH session runs the installer and sits with no prompt. The second SSH session takes each picture. The workstation window downloads the picture so you can see the page.
 
