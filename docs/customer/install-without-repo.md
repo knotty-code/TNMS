@@ -52,11 +52,76 @@ ls -1 /tmp/install-tnms-wizard.sh \
 /tmp/TNMS_LUX_R9.1.0.593.0_1904.zip
 ```
 
-Leave `tnms-install.properties.in` unchanged. Section 1 does not use these files. **Confirm the install files** moves them from `/tmp` to `/opt/tnms-install` and sets the permissions.
+Leave `tnms-install.properties.in` unchanged. Section 1 does not use these files. The next section creates the directories on `/opt`. **Confirm the install files** then moves the five files into those directories and sets the file modes.
+
+## Create the /opt directories
+
+Run this as root after [pre-install.md](pre-install.md) has mounted the 1 TB disk on `/opt`. The commands create the product directories and set their modes. `install -d` on a directory that already exists sets the owner, group, and mode again.
+
+**Confirm by running:**
+
+```bash
+findmnt -n -o SOURCE,SIZE,TARGET /opt
+```
+
+**Expected output:**
+
+One line. `SOURCE` is `/dev/mapper/datavg-optlv` and `SIZE` is `1023.5G` on this image. Empty output means `/opt` is not a mount. Stop and finish the pre-install guide before creating these directories.
+
+```text
+/dev/mapper/datavg-optlv 1023.5G /opt
+```
+
+`/opt/oracle` holds the database software. `/opt/nokia` holds the TNMS software. `/opt/tnms-data` is the TNMS data directory. `/opt/oradata` holds `ora1`, `ora2`, and `ora3`. Pre-install bind-mounts `/opt/tnms-data` on `/nokia` and `/opt/oradata` on `/oradata`. `/opt/tnms-install` holds the wizard files. `/opt/tnms-install/resources` holds the three zip files.
+
+| Path | Mode | Owner and group |
+| --- | --- | --- |
+| /opt/oracle | 755 | root root |
+| /opt/nokia | 755 | root root |
+| /opt/tnms-data | 755 | root root |
+| /opt/oradata | 755 | root root |
+| /opt/oradata/ora1 | 755 | root root |
+| /opt/oradata/ora2 | 755 | root root |
+| /opt/oradata/ora3 | 755 | root root |
+| /opt/tnms-install | 750 | root azureuser |
+| /opt/tnms-install/resources | 750 | root azureuser |
+
+Mode `755` lets the `oracle` and `tnms` users enter those directories when the install creates them. Mode `750` and group `azureuser` let the SSH login open `/opt/tnms-install`. Other accounts cannot. Root remains the owner.
+
+```bash
+install -d -o root -g root -m 755 /opt/oracle /opt/nokia /opt/tnms-data
+install -d -o root -g root -m 755 /opt/oradata/ora1 /opt/oradata/ora2 /opt/oradata/ora3
+install -d -o root -g azureuser -m 750 /opt/tnms-install /opt/tnms-install/resources
+restorecon -RF /opt/oracle /opt/nokia /opt/tnms-data /opt/oradata /opt/tnms-install
+```
+
+`install` prints nothing. `restorecon` prints a line for each directory it relabels, or nothing when the labels are already right.
+
+**Confirm by running:**
+
+```bash
+stat -c '%A %U %G %n' /opt/oracle /opt/nokia /opt/tnms-data \
+  /opt/oradata /opt/oradata/ora1 /opt/oradata/ora2 /opt/oradata/ora3 \
+  /opt/tnms-install /opt/tnms-install/resources
+```
+
+**Expected output:**
+
+```text
+drwxr-xr-x root root /opt/oracle
+drwxr-xr-x root root /opt/nokia
+drwxr-xr-x root root /opt/tnms-data
+drwxr-xr-x root root /opt/oradata
+drwxr-xr-x root root /opt/oradata/ora1
+drwxr-xr-x root root /opt/oradata/ora2
+drwxr-xr-x root root /opt/oradata/ora3
+drwxr-x--- root azureuser /opt/tnms-install
+drwxr-x--- root azureuser /opt/tnms-install/resources
+```
 
 ## Where the install files go
 
-> The five files are in `/tmp` from **Before you start**. **Confirm the install files** moves them to the paths in this table and sets the modes. The script reads the properties file from `/opt/tnms-install`. One file without the other stops the script.
+> The directories were created in **Create the /opt directories**. The five files are in `/tmp` from **Before you start**. **Confirm the install files** moves them to the paths in this table and sets the file modes. The script reads the properties file from `/opt/tnms-install`. One file without the other stops the script.
 
 | Wizard file | Path on the server |
 | --- | --- |
@@ -141,7 +206,7 @@ When `ls /opt/tnms-install` already lists `install-tnms-wizard.sh` and `tnms-ins
 The wizard script and the properties file go in `/opt/tnms-install`. The three zip files go in `/opt/tnms-install/resources`.
 
 ```bash
-install -d -o root -g root /opt/tnms-install /opt/tnms-install/resources
+install -d -o root -g azureuser -m 750 /opt/tnms-install /opt/tnms-install/resources
 install -o root -g root /tmp/install-tnms-wizard.sh /opt/tnms-install/install-tnms-wizard.sh
 install -o root -g root /tmp/tnms-install.properties.in /opt/tnms-install/tnms-install.properties.in
 install -o root -g root \
