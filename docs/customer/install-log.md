@@ -4,7 +4,7 @@ Run this on a fresh Red Hat Enterprise Linux 8 server, as root, from top to bott
 
 One machine. Small Plus. TNMS Server and Mediation together. New database.
 
-Passwords are not in this file. Put them only in `/root/tnms-db-credentials` (mode 600) and in the site checklist. A step headed **This host** applies when the fresh server matches the condition in that step.
+The passwords used on this host are in the table below. Write those same values into `/root/tnms-db-credentials` (mode 600). A step headed **This host** applies when the fresh server matches the condition in that step.
 
 A line that says **Confirm by running** is a separate command. Run that command, and compare its output with the block under it. A work command that prints nothing is finished when the shell prompt returns. Names and addresses below are this host. Sizes move with the disk. Replace `TNMS` and `172.16.0.4` with the site values.
 
@@ -29,10 +29,14 @@ Substitute the site address and names. Keep the paths and the SID unless the sit
 | SFTP user | `tnms_sftp` |
 | Database OS user | `oracle`, groups `oinstall` and `dba` |
 | Database login user | `tnmsdba` |
+| `SYS` password | `TnZT5hgW8Zwsp79` |
+| `SYSTEM` password | `TnZT5hgW8Zwsp79` |
+| `tnmsdba` password | `Tnc25xQ36XBUa9` |
+| `tnms_sftp` password | `Tsvb5-Xe8ou3wR9` |
 | Large-disk directory | `/home/tnms-layout` (the big filesystem on this host was `/home`) |
 | Media directory | `/home/azureuser/TNMS/resources` |
 
-Password rule used for `SYS`, `SYSTEM`, and `tnmsdba`: 6 to 30 characters from `a-z`, `A-Z`, `0-9`, and `+ - _ { }`.
+Password rule used for `SYS`, `SYSTEM`, and `tnmsdba`: 6 to 30 characters from `a-z`, `A-Z`, `0-9`, and `+ - _ { }`. `SYS` and `SYSTEM` are the same value. `tnmsdba` is a different value. The SFTP password is separate again.
 
 ## Media to copy onto the server
 
@@ -513,12 +517,12 @@ install -m 600 /dev/null /root/tnms-db-credentials
 
 `install` prints nothing.
 
-Edit that file so it contains three lines, using passwords that meet the rule above. Use a different value for `TNMSDBA_PASSWORD` than for the two Oracle accounts:
+Edit that file so it contains these three lines:
 
 ```text
-SYS_PASSWORD=<sys password>
-SYSTEM_PASSWORD=<system password>
-TNMSDBA_PASSWORD=<tnmsdba password>
+SYS_PASSWORD=TnZT5hgW8Zwsp79
+SYSTEM_PASSWORD=TnZT5hgW8Zwsp79
+TNMSDBA_PASSWORD=Tnc25xQ36XBUa9
 ```
 
 `SYS_PASSWORD` and `SYSTEM_PASSWORD` are what `installation.sh` asks for. `TNMSDBA_PASSWORD` is typed into the TNMS wizard later. The Oracle installer also creates OS user `orabackup` in group `dba`. Leave that account in `dba`.
@@ -536,15 +540,13 @@ stat -c '%a %U:%G' /root/tnms-db-credentials
 **Confirm by running:**
 
 ```bash
-grep -E '^[A-Z_]+=' /root/tnms-db-credentials | cut -d= -f1
+grep -E '^[A-Z_]+=' /root/tnms-db-credentials
 ```
 
-The output is the three key names. Password values are not printed.
-
 ```text
-SYS_PASSWORD
-SYSTEM_PASSWORD
-TNMSDBA_PASSWORD
+SYS_PASSWORD=TnZT5hgW8Zwsp79
+SYSTEM_PASSWORD=TnZT5hgW8Zwsp79
+TNMSDBA_PASSWORD=Tnc25xQ36XBUa9
 ```
 
 ## 7. Install Oracle 19c
@@ -769,7 +771,7 @@ Answer the screens in this order:
 5. Hardware. **Small Plus**. The page opens on Medium.
 6. Customization. Leave **Users And Groups** and **Deployment Directories** unchecked. The defaults are user `tnms`, group `tnms`, SFTP user `tnms_sftp`, Oracle user `oracle`, DBA group `dba`, install directory `/opt/nokia/tnms`, data directory `/nokia/tnms`.
 7. Database. **New**.
-8. Connection. Host `127.0.0.1`, port `1521`, user `tnmsdba`, SID `TNMS`, Oracle home `/opt/oracle/product/19c/dbhome_1`. The password field labeled for user `sys` is `SYS_PASSWORD`. The `tnmsdba` password is `TNMSDBA_PASSWORD`.
+8. Connection. Host `127.0.0.1`, port `1521`, user `tnmsdba`, SID `TNMS`, Oracle home `/opt/oracle/product/19c/dbhome_1`. The password field labeled for user `sys` is `TnZT5hgW8Zwsp79`. The `tnmsdba` password is `Tnc25xQ36XBUa9`.
 9. Advisory message. Leave it disabled.
 10. Managers. Check Ethernet Manager, ASON Manager, Optical Manager, and Optical Spectrum Insight. Leave ZTC Manager unchecked.
 11. Frontend servers. Add none.
@@ -888,22 +890,22 @@ file /usr/bin/lsmem
 
 ## 11. SFTP account
 
-`tnms` stays locked. Set a password for `tnms_sftp`, store the same value as `TNMS_SFTP_PASSWORD` in `/root/tnms-db-credentials`, and restrict the account to SFTP under `/nokia`.
+`tnms` stays locked. Set the `tnms_sftp` password to `Tsvb5-Xe8ou3wR9`, store that same value in `/root/tnms-db-credentials`, and restrict the account to SFTP under `/nokia`.
 
 ```bash
 /usr/bin/passwd tnms_sftp
 ```
 
-The command asks for the new password twice. It ends with:
+The command asks for the new password twice. Type `Tsvb5-Xe8ou3wR9` both times. It ends with:
 
 ```text
 passwd: all authentication tokens updated successfully.
 ```
 
-Add one line to `/root/tnms-db-credentials`, using that same password. Do not print the file.
+Add this line to `/root/tnms-db-credentials`:
 
 ```text
-TNMS_SFTP_PASSWORD=<sftp password>
+TNMS_SFTP_PASSWORD=Tsvb5-Xe8ou3wR9
 ```
 
 ```bash
@@ -917,16 +919,14 @@ Those commands print nothing.
 **Confirm by running:**
 
 ```bash
-grep -E '^[A-Z_]+=' /root/tnms-db-credentials | cut -d= -f1
+grep -E '^[A-Z_]+=' /root/tnms-db-credentials
 ```
 
-The output is the key names. Password values are not printed.
-
 ```text
-SYS_PASSWORD
-SYSTEM_PASSWORD
-TNMSDBA_PASSWORD
-TNMS_SFTP_PASSWORD
+SYS_PASSWORD=TnZT5hgW8Zwsp79
+SYSTEM_PASSWORD=TnZT5hgW8Zwsp79
+TNMSDBA_PASSWORD=Tnc25xQ36XBUa9
+TNMS_SFTP_PASSWORD=Tsvb5-Xe8ou3wR9
 ```
 
 **Confirm by running:**

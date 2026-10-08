@@ -8,7 +8,7 @@ This is the path for one physical machine, **Small Plus**, **RHEL**, with **TNMS
 
 The vendor procedure is the Nokia *TNMS Installation Manual (IMN, Linux)*, release 9.1, document A50023-K2268-X040-76D1, August 2026, Issue 001. The working copy is in `docs/nokia-imn/`. Section numbers below point at that copy. Where this guide chooses one of several legal options, the choice is stated here.
 
-Passwords are not written in this file. Record them in the checklist (`docs/nokia-imn/tnms-installation-checklist-linux.xlsx` is the blank Nokia template) and keep that filled copy on encrypted storage.
+The passwords used on this host are the same values as in [install-log.md](install-log.md): `SYS` and `SYSTEM` are `TnZT5hgW8Zwsp79`, `tnmsdba` is `Tnc25xQ36XBUa9`, and `tnms_sftp` is `Tsvb5-Xe8ou3wR9`. The blank Nokia checklist is `docs/nokia-imn/tnms-installation-checklist-linux.xlsx`.
 
 ## What this install includes
 
@@ -318,8 +318,8 @@ Answer the prompts as follows:
 | Installer zip, TNMS installer folder, `TNMS.rsp`, template | accept each default when the files are in `/opt/oracle/oramedia` and the script's default matches the extract. Otherwise give the real path. |
 | Database name | site SID, default `TNMS` |
 | Listener port | `1521` |
-| `SYS` password | checklist. Database user rules: 6–30 characters from the set in manual section 6.4.2. |
-| `SYSTEM` password | checklist, same rules |
+| `SYS` password | `TnZT5hgW8Zwsp79` |
+| `SYSTEM` password | `TnZT5hgW8Zwsp79` |
 
 The script prints requirement checks for system, disk, memory, swap, hostname, NIS domain, users and groups, and directories. Fix any error before continuing. A memory example in the manual looks like `Required: 16 GB` against a smaller host. This host must show 32 GB.
 
@@ -392,7 +392,7 @@ Wizard choices for this design:
 | Customization | leave users, groups, and directories at the defaults unless a checkbox is required to display them. Defaults: OS user `tnms`, group `tnms`, SFTP user `tnms_sftp`, database OS user `oracle`, DBA group `dba`. Install directory `/opt/nokia/tnms`, data directory `/nokia/tnms`, database `/opt/oracle`, database data `/oradata`. The two TNMS directories are the glossary defaults for `<Product_Installation_Folder>` and `<Product_Data_Folder>`. |
 | Connection | only if the host has more than one IP. Client access and server backend access are both the site IPv4. |
 | Database | **New** |
-| Database connection | IP `127.0.0.1`, port `1521`, user `tnmsdba`, SID from the site table, Oracle home `/opt/oracle/product/19c/dbhome_1`, `SYS` password from the checklist. The `tnmsdba` password follows the same database rules. |
+| Database connection | IP `127.0.0.1`, port `1521`, user `tnmsdba`, SID `TNMS`, Oracle home `/opt/oracle/product/19c/dbhome_1`. The password field labeled for user `sys` is `TnZT5hgW8Zwsp79`. The `tnmsdba` password is `Tnc25xQ36XBUa9`. |
 | Advisory message | disabled, unless the site table names a message. |
 | Components | the managers, NBIs, and NE families listed in the site table. Do not select Embedded DNA or Node Manager. |
 | Pre-installation summary | confirm the PDT numbers. **Install**. |
@@ -423,11 +423,13 @@ Delete the TNMS zip files and `/install/tnms` only after the checks in the next 
 
 ### SFTP account
 
-Manual section 7.5. The OS user `tnms` stays locked. Set a password for `tnms_sftp` and store it in the checklist. When that password changes later, change it in the TNMS Client as well (Administration Manual, SFTP chapter).
+Manual section 7.5. The OS user `tnms` stays locked. Set the `tnms_sftp` password to `Tsvb5-Xe8ou3wR9`. When that password changes later, change it in the TNMS Client as well (Administration Manual, SFTP chapter).
 
 ```bash
 /usr/bin/passwd tnms_sftp
 ```
+
+Type `Tsvb5-Xe8ou3wR9` at both prompts.
 
 Restrict `tnms_sftp` to the data directory:
 
