@@ -89,10 +89,14 @@ One line. `SOURCE` is `/dev/mapper/datavg-optlv` and `SIZE` is `1023.5G` on this
 Mode `755` lets the `oracle` and `tnms` users enter those directories when the install creates them. Mode `750` and group `azureuser` let the SSH login open `/opt/tnms-install`. Other accounts cannot. Root remains the owner.
 
 ```bash
-install -d -o root -g root -m 755 /opt/oracle /opt/nokia /opt/tnms-data
-install -d -o root -g root -m 755 /opt/oradata/ora1 /opt/oradata/ora2 /opt/oradata/ora3
-install -d -o root -g azureuser -m 750 /opt/tnms-install /opt/tnms-install/resources
-restorecon -RF /opt/oracle /opt/nokia /opt/tnms-data /opt/oradata /opt/tnms-install
+install -d -o root -g root -m 755 \
+  /opt/oracle /opt/nokia /opt/tnms-data
+install -d -o root -g root -m 755 \
+  /opt/oradata/ora1 /opt/oradata/ora2 /opt/oradata/ora3
+install -d -o root -g azureuser -m 750 \
+  /opt/tnms-install /opt/tnms-install/resources
+restorecon -RF \
+  /opt/oracle /opt/nokia /opt/tnms-data /opt/oradata /opt/tnms-install
 ```
 
 `install` prints nothing. `restorecon` prints a line for each directory it relabels, or nothing when the labels are already right.
