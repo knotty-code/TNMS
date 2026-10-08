@@ -70,6 +70,23 @@ Also done before the database installer:
 - NIS domain name is `(none)`. SELinux is enforcing.
 - Database configuration passed to the installer is Small Plus (`SP`), SID `TNMS`, listener port `1521`, listener name `LISNER`. The host has 16 GB of RAM, so the installer's 32 GB memory check will fail and silent mode is set to continue. Passwords are in `/root/tnms-db-credentials` and are not in git.
 
+## Database install, 2026-10-08 02:46 UTC
+
+`installation.sh` finished with `Final status of the execution: Success`. Exit code 0.
+
+| Item | Value |
+| --- | --- |
+| Configuration | Small Plus (`SP`). The 32 GB RAM check failed at 16 GB and silent mode continued. |
+| SID | `TNMS` |
+| Oracle home | `/opt/oracle/product/19c/dbhome_1` |
+| Listener | `LISNER` on port 1521, status READY |
+| oratab | `TNMS:/opt/oracle/product/19c/dbhome_1:Y` |
+| Patches from the bundle | `30869156` Database Release Update 19.7.0.0.200414, `30894985` OCW Release Update 19.7.0.0.0 |
+| Logs | `/home/oracle/ossnms_installation_log/` |
+| Passwords | `/root/tnms-db-credentials` |
+
+The separate security-patch script in the prerequisites tree expects later patch zips (`p6880880`, `p38629535`, `p38586770`, `p38523609`). Those files are not in the media we have. The database installer already applied the 19.7 patches that shipped inside `LINUX.X64_193000_db_home_and_patches (1).zip`.
+
 ## Not done yet
 
-Oracle software installation and TNMS Server and Mediation installation.
+TNMS Server and Mediation installation with `TNMS.bin`.
