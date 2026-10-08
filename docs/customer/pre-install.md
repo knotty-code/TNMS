@@ -2,6 +2,8 @@
 
 Run this on a new Red Hat Enterprise Linux 8 VM before [install-without-repo.md](install-without-repo.md). The VM matches the resources of the server that already has TNMS 9.1 installed. This guide builds the disk layout. The install guide installs Oracle and TNMS.
 
+Run the commands as root. Section 1 opens that shell from the `azureuser` login. The prompt ends with `#`.
+
 Leave the existing TNMS server as it is. Its 1 TB volume is mounted on `/home`.
 
 A line that says **Confirm by running** is a separate command. Run that command. The next **Expected output** block is what that command should print. A work command that prints nothing is finished when the shell prompt returns. Sizes move with the disk.
@@ -47,6 +49,30 @@ Install the product on `/opt`. That is the filesystem location for add-on softwa
 Oracle port 1521 stays closed to the network. The install guide opens the client on TCP 8444.
 
 ## 1. Confirm the VM
+
+Log in as `azureuser`, then open a root shell. Every command after this one runs in that shell.
+
+```bash
+sudo -i
+```
+
+**Expected output:**
+
+The prompt changes from `[azureuser@TNMSDEMO ~]$` to `[root@TNMSDEMO ~]#`. The hostname is the VM name.
+
+**Confirm by running:**
+
+```bash
+id
+```
+
+**Expected output:**
+
+```text
+uid=0(root) gid=0(root) groups=0(root)
+```
+
+`lvs` in the `azureuser` shell stops with `Permission denied` on `/run/lock/lvm/P_global:aux`. That message means the shell is still `azureuser`. Run `sudo -i` again.
 
 ```bash
 nproc
