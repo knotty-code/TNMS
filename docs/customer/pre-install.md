@@ -42,7 +42,7 @@ Install the product on `/opt`. That is the filesystem location for add-on softwa
 | `/tmp` | 16 GB (`rootvg/tmplv`), executable |
 | `/boot` | 500 MB |
 | `/boot/efi` | 495 MB |
-| `/home` | 8 GB on the OS disk |
+| `/home` | About 1 GB on the OS disk (`1014M` on this image) |
 | Swap | 18 GB, file `/opt/swapfile` |
 | SELinux | Enforcing |
 
@@ -121,7 +121,7 @@ lvs --noheadings -o lv_name,lv_size,vg_name
 
 **Expected output:**
 
-`rootvg` contains `rootlv`, `usrlv`, `varlv`, `tmplv`, and `homelv`. A new image of this family starts with `rootlv` at 2 GB and `tmplv` at 2 GB. `homelv` stays about 8 GB.
+`rootvg` contains `rootlv`, `usrlv`, `varlv`, `tmplv`, and `homelv`. A new image of this family starts with `rootlv` at 2 GB, `tmplv` at 2 GB, and `homelv` at about 1 GB. Leave `homelv` at that size.
 
 ## 2. Grow `/` and `/tmp` when they are still small
 
@@ -173,7 +173,13 @@ df -h / /tmp /home
 
 **Expected output:**
 
-`/` is about 8G with several GB free. `/tmp` is 16G. `/home` is about 8G and is a `rootvg` volume. A `/home` of about 1T means the data disk was added to the home volume. Stop and use a disk that is still empty.
+`/` is about 8G with several GB free. `/tmp` is 16G. `/home` is about 1G and is a `rootvg` volume. On this image the line is `1014M`. A `/home` of about 1T means the data disk was added to the home volume. Stop when that happens.
+
+```text
+/dev/mapper/rootvg-rootlv  8.0G  118M  7.9G   2% /
+/dev/mapper/rootvg-tmplv    16G  149M   16G   1% /tmp
+/dev/mapper/rootvg-homelv 1014M   40M  975M   4% /home
+```
 
 ## 3. Mount the 1 TB disk on `/opt`
 
@@ -314,7 +320,7 @@ df -h / /home /opt /opt/oracle /opt/nokia /opt/tnms-install
 
 **Expected output:**
 
-`/home` is about 8G. `/opt`, `/opt/oracle`, `/opt/nokia`, and `/opt/tnms-install` are the 1 TB volume. `/` has several GB free.
+`/home` is about 1G. `/opt`, `/opt/oracle`, `/opt/nokia`, and `/opt/tnms-install` are the 1 TB volume. `/` has several GB free.
 
 **Confirm by running:**
 

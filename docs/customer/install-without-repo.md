@@ -328,12 +328,12 @@ df -h / /tmp /home /opt
 
 **Expected output:**
 
-`/` is about 8G with several GB free. `/tmp` is 16G. `/home` is about 8G. `/opt` is about 1T. Used and available sizes move.
+`/` is about 8G with several GB free. `/tmp` is 16G. `/home` is about 1G. `/opt` is about 1T. Used and available sizes move.
 
 ```text
-/dev/mapper/rootvg-rootlv  8.0G  123M  7.9G   2% /
-/dev/mapper/rootvg-tmplv    16G  1.3G   15G   8% /tmp
-/dev/mapper/rootvg-homelv   8.0G  100M  7.9G   2% /home
+/dev/mapper/rootvg-rootlv  8.0G  118M  7.9G   2% /
+/dev/mapper/rootvg-tmplv    16G  149M   16G   1% /tmp
+/dev/mapper/rootvg-homelv 1014M   40M  975M   4% /home
 /dev/mapper/datavg-optlv    1.1T   20G  1.1T   2% /opt
 ```
 
