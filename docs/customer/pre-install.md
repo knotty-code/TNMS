@@ -238,6 +238,22 @@ mount /dev/datavg/optlv /opt
 
 That command prints nothing.
 
+**Confirm by running:**
+
+```bash
+findmnt -n -o SOURCE,SIZE,TARGET /opt
+```
+
+**Expected output:**
+
+One line. `SOURCE` is `/dev/mapper/datavg-optlv` and `SIZE` is about `1T`.
+
+```text
+/dev/mapper/datavg-optlv  1T   /opt
+```
+
+Empty output means `/opt` is not a mount. `/opt` is still a directory on the 8 GB root filesystem. Stop and repeat the `mount` command. Section 4 writes an 18 GB file under `/opt`.
+
 ## 4. Directories, data binds, and swap
 
 ```bash
@@ -249,6 +265,25 @@ mount --bind /opt/oradata /oradata
 ```
 
 Those commands print nothing. `/opt/tnms-install` is mode `700` because it will hold the properties file. The database passwords and the wizard log stay in `/root`.
+
+**Confirm by running:**
+
+```bash
+findmnt -n -o SOURCE,SIZE,TARGET /opt
+df -h /opt
+```
+
+**Expected output:**
+
+`findmnt` prints one line for `/dev/mapper/datavg-optlv`. Empty `findmnt` output means `/opt` is not a mount. `df` shows that same device, with `Avail` about `1T` and greater than 20G. Continue to `dd` only when both are true. `df` showing `rootvg-rootlv` and a size of about 8G means `/opt` is still on the root filesystem. `dd` then stops with `No space left on device` after about 7.9 GiB and leaves `/` full.
+
+```text
+/dev/mapper/datavg-optlv  1T   /opt
+Filesystem                    Size  Used Avail Use% Mounted on
+/dev/mapper/datavg-optlv      1.0T   10G  1.0T   1% /opt
+```
+
+`Used` follows the disk. `Avail` stays above 20G.
 
 ```bash
 dd if=/dev/zero of=/opt/swapfile bs=1G count=18 status=progress
@@ -269,10 +304,20 @@ Setting up swapspace version 1, size = 18 GiB
 
 `swapon` prints nothing.
 
-Write `/etc/fstab` with the filesystem UUID. `nofail` lets the VM boot when the data disk is absent. The checks in the next section catch a missing mount before the install.
+**Confirm by running:**
 
 ```bash
 OPT_UUID=$(blkid -s UUID -o value /dev/datavg/optlv)
+printf '%s\n' "$OPT_UUID"
+```
+
+**Expected output:**
+
+One line, a UUID with hyphens. `blkid: error:` or an empty line means `/dev/datavg/optlv` does not exist. Stop. Leave `/etc/fstab` unchanged and return to section 3.
+
+Write `/etc/fstab` with that UUID. `nofail` lets the VM boot when the data disk is absent. The checks in the next section catch a missing mount before the install. Append these lines only after the UUID check printed a value. An empty `UUID=` line is skipped by `mount -a` because of `nofail`, and that command still prints nothing.
+
+```bash
 cat >> /etc/fstab << EOF
 UUID=${OPT_UUID} /opt xfs defaults,nofail 0 0
 /opt/tnms-data /nokia none bind,nofail 0 0
@@ -283,7 +328,7 @@ systemctl daemon-reload
 mount -a
 ```
 
-`blkid`, `cat`, `systemctl`, and `mount` print nothing.
+`cat`, `systemctl`, and `mount` print nothing.
 
 ```bash
 restorecon -RF /opt/oracle /opt/nokia /opt/tnms-install /opt/tnms-data /opt/oradata /nokia /oradata
