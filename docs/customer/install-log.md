@@ -748,9 +748,9 @@ cd /home/tnms-layout/installer/TNMS_Installer
 ./TNMS.bin -i gui -r /root/tnms-install.properties -tempdir /tmp/tnms-gui
 ```
 
-The installer window title is `TNMS 9.1.0.593.0 Installer`. The command does not return until the wizard exits.
+The installer window title is `TNMS 9.1.0.593.0 Installer`. The command does not return until the wizard exits. Leave that shell alone. Open a second shell for the checks below.
 
-**Confirm by running,** before answering screens:
+**Confirm by running,** in the second shell, before answering screens:
 
 ```bash
 ps -C Xvfb -o args=
@@ -760,7 +760,37 @@ ps -C Xvfb -o args=
 Xvfb :99 -screen 0 1400x900x24 -ac +extension GLX +render -noreset
 ```
 
-Someone has to see display `:99` and answer the screens. A serial console or an SSH session does not show it. On a graphical console the same window opens without Xvfb, and `ps -C Xvfb -o args=` prints nothing.
+This command does not open the installer. It prints the command line of the virtual screen, with no column heading. Read the line as follows:
+
+- `Xvfb` is the virtual screen. It is a screen held in memory. No monitor is attached to it.
+- `:99` is the name of that screen. `export DISPLAY=:99` is the line that sent the installer there. The installer window is drawn on `:99`.
+- `-screen 0 1400x900x24` is one screen, 1400 by 900 pixels, 24-bit color. The wizard fits inside that rectangle.
+- `-ac` lets another program on this server read the screen. That is what makes the screenshot command below work.
+- A line that matches means the screen is up. The shell redirection `>/tmp/tnms-gui/xvfb.log` and the `&` are absent here. Those belong to the shell that started Xvfb, and they are not part of the process command line.
+
+The SSH session and the serial console show the text of the shell. The wizard is a window on display `:99`, so it does not appear in that text. Answers are clicks and typed fields on `:99`. Text entered at the shell prompt stays in the shell.
+
+Look at the current page from the second shell:
+
+```bash
+dnf -y install ImageMagick
+```
+
+The command ends with:
+
+```text
+Complete!
+```
+
+```bash
+import -window root -display :99 /tmp/tnms-gui/screen.png
+```
+
+That command prints nothing. Open `/tmp/tnms-gui/screen.png`. The picture is the wizard page that is on display `:99` right now. Take a new picture after each answer. The title in the picture is `TNMS 9.1.0.593.0 Installer`.
+
+On this host the clicks were sent with `xdotool` from the second session, with `DISPLAY=:99`. The first session stayed inside `./TNMS.bin` until the wizard exited. `xdotool` is not required when the window is on a real monitor.
+
+**Graphical console.** Skip every Xvfb command and run `./TNMS.bin` from a terminal on the desktop. The window opens on the monitor. In that case the same `ps` command prints nothing, because Xvfb was never started. An empty result is the finished check on that path. On the Xvfb path, an empty result means the virtual screen is not running, so start Xvfb again before `./TNMS.bin`.
 
 Answer the screens in this order:
 
