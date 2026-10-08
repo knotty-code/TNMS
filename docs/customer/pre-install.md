@@ -246,10 +246,10 @@ findmnt -n -o SOURCE,SIZE,TARGET /opt
 
 **Expected output:**
 
-One line. `SOURCE` is `/dev/mapper/datavg-optlv` and `SIZE` is about `1T`.
+One line. `SOURCE` is `/dev/mapper/datavg-optlv` and `SIZE` is `1023.5G` on this image. That is the 1 TB disk.
 
 ```text
-/dev/mapper/datavg-optlv  1T   /opt
+/dev/mapper/datavg-optlv 1023.5G /opt
 ```
 
 Empty output means `/opt` is not a mount. `/opt` is still a directory on the 8 GB root filesystem. Stop and repeat the `mount` command. Section 4 writes an 18 GB file under `/opt`.
@@ -278,12 +278,12 @@ df -h /opt
 `findmnt` prints one line for `/dev/mapper/datavg-optlv`. Empty `findmnt` output means `/opt` is not a mount. `df` shows that same device, with `Avail` about `1T` and greater than 20G. Continue to `dd` only when both are true. `df` showing `rootvg-rootlv` and a size of about 8G means `/opt` is still on the root filesystem. `dd` then stops with `No space left on device` after about 7.9 GiB and leaves `/` full.
 
 ```text
-/dev/mapper/datavg-optlv  1T   /opt
-Filesystem                    Size  Used Avail Use% Mounted on
-/dev/mapper/datavg-optlv      1.0T   10G  1.0T   1% /opt
+/dev/mapper/datavg-optlv 1023.5G /opt
+Filesystem                Size  Used Avail Use% Mounted on
+/dev/mapper/datavg-optlv  1.0T  7.2G 1017G   1% /opt
 ```
 
-`Used` follows the disk. `Avail` stays above 20G.
+`Used` on a fresh filesystem is about 7.2G. `Avail` stays above 20G. The text block above is an example of the output. It is not a command.
 
 ```bash
 dd if=/dev/zero of=/opt/swapfile bs=1G count=18 status=progress

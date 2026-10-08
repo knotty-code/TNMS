@@ -62,10 +62,10 @@ findmnt -n -o SOURCE,SIZE,TARGET /opt
 
 **Expected output:**
 
-`find` prints nothing. `findmnt` prints one line. `SOURCE` is `/dev/mapper/datavg-optlv` and `SIZE` is about `1T`.
+`find` prints nothing. `findmnt` prints one line. `SOURCE` is `/dev/mapper/datavg-optlv` and `SIZE` is `1023.5G` on this image. That line is the output, not a command.
 
 ```text
-/dev/mapper/datavg-optlv  1T   /opt
+/dev/mapper/datavg-optlv 1023.5G /opt
 ```
 
 When `lvs` has no `datavg`, go to section 3 of [pre-install.md](pre-install.md) and run it from `DATA_DISK=` through the mount confirm. Then return here at section 3.
