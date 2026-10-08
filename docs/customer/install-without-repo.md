@@ -14,13 +14,11 @@ A line that says **Confirm by running** is a separate command. Run that command.
 
 Copy these five files to `/tmp` on the server before section 1. Do this from the workstation before hostname, packages, Oracle, or TNMS. `/tmp` is the 16 GB filesystem. The Oracle zip is about 5 GB. `/home` is about 1 GB, so leave these files out of `/home`.
 
-| Staged file | Path on the server |
-| --- | --- |
-| install-tnms-wizard.sh | /tmp/install-tnms-wizard.sh |
-| tnms-install.properties.in | /tmp/tnms-install.properties.in |
-| LINUX.X64_193000_db_home_and_patches.zip | /tmp/LINUX.X64_193000_db_home_and_patches.zip |
-| TNMS_LUX_R9.1.0.593.0_1904_Prerequisites.zip | /tmp/TNMS_LUX_R9.1.0.593.0_1904_Prerequisites.zip |
-| TNMS_LUX_R9.1.0.593.0_1904.zip | /tmp/TNMS_LUX_R9.1.0.593.0_1904.zip |
+- `/tmp/install-tnms-wizard.sh`
+- `/tmp/tnms-install.properties.in`
+- `/tmp/LINUX.X64_193000_db_home_and_patches.zip`
+- `/tmp/TNMS_LUX_R9.1.0.593.0_1904_Prerequisites.zip`
+- `/tmp/TNMS_LUX_R9.1.0.593.0_1904.zip`
 
 From the workstation directory that contains the five files:
 
