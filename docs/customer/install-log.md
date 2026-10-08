@@ -4,11 +4,26 @@ Run this on a fresh Red Hat Enterprise Linux 8 server, as root, from top to bott
 
 One machine. Small Plus. TNMS Server and Mediation together. New database.
 
-The passwords used on this host are in the table below. Write those same values into `/root/tnms-db-credentials` (mode 600). A step headed **This host** applies when the fresh server matches the condition in that step.
+The TNMS client login is the first section below. The database and SFTP passwords are in the table after that. Write the database passwords into `/root/tnms-db-credentials` (mode 600). A step headed **This host** applies when the fresh server matches the condition in that step.
 
 A line that says **Confirm by running** is a separate command. Run that command. The next **Expected output** block is what that command should print. Compare the two. A work command that prints nothing is finished when the shell prompt returns. Names and addresses below are this host. Sizes move with the disk. Replace `TNMS` and `172.16.0.4` with the site values.
 
 The longer manual notes are in [tnms-9.1-linux-install.md](tnms-9.1-linux-install.md).
+
+## TNMS client login
+
+Use this login in the browser and in the TNMS client.
+
+| Client login | Value |
+| --- | --- |
+| Username | `Administrator` |
+| Password | `e2e!Net4u#` |
+| Address | `https://<server-ip>:8444/tnms-webclient` |
+| Port | TCP `8444` |
+
+> The first login asks for a new password. Use at least 8 characters, with two letters and one number, and change at least 3 characters from `e2e!Net4u#`. Keep the username out of the new password, and keep any run of letters or digits to 3.
+
+Allow inbound TCP 8444 on the security group in front of the server. The browser warns about the certificate. Continue past that warning. The next table is the database and SFTP passwords. Those values go in `/root/tnms-db-credentials`.
 
 ## Values used on this host
 
@@ -1227,6 +1242,8 @@ HTTP/1.1 301 Moved Permanently
 Server: openresty
 Location: https://127.0.0.1:8444/tnms-webclient
 ```
+
+When that 301 is present, the client can log in. Use the **TNMS client login** at the start of this document: username `Administrator`, password `e2e!Net4u#`, address `https://<server-ip>:8444/tnms-webclient`.
 
 Startup logs can say `LD_PRELOAD` of `libjemalloc.so` cannot be preloaded. `jemalloc-5.2.1-3.el8` was installed and the processes still started.
 

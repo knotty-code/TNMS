@@ -498,6 +498,8 @@ ss -ltnp | grep 8444
 
 `https://127.0.0.1:8444` returns 301 to `/tnms-webclient` when NGINX is up.
 
+The TNMS client login is username `Administrator`, password `e2e!Net4u#`, at `https://<server-ip>:8444/tnms-webclient`. Allow inbound TCP 8444. The first login asks for a new password. The `SYS`, `tnmsdba`, and `tnms_sftp` passwords are the database and SFTP passwords.
+
 ### Checks
 
 | Check | Expect |
