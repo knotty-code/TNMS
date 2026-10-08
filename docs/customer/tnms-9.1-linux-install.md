@@ -1,6 +1,8 @@
 # TNMS 9.1 on Linux — installation we are following
 
-**Status: Oracle 19c (Small Plus, SID `TNMS`) and TNMS 9.1.0.593.0 Server and Mediation are installed on this host.** `scs_daemon` is running and NGINX answers on port 8444. The wizard reported one serious error, `ORA-02065` from `db_setup.sh`, and the install was kept. What was done on this host is in [install-log.md](install-log.md). The procedure below is the path to repeat.
+**Status: Oracle 19c (Small Plus, SID `TNMS`) and TNMS 9.1.0.593.0 Server and Mediation are installed on this host.** `scs_daemon` is running and NGINX answers on port 8444. The wizard reported one serious error, `ORA-02065` from `db_setup.sh`, and the install was kept.
+
+The ordered commands to repeat on a fresh RHEL 8 server are in [install-log.md](install-log.md). The sections below are the same install, written against the Nokia manual.
 
 This is the path for one physical machine, **Small Plus**, **RHEL**, with **TNMS Server and TNMS Mediation on that same machine**. A customer who repeats these steps, with their own site values, gets the same install.
 
