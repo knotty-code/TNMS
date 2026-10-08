@@ -44,7 +44,7 @@ Put these three zip files on the large filesystem. On this host that directory w
 
 | File | Role |
 | --- | --- |
-| `LINUX.X64_193000_db_home_and_patches (1).zip` | Oracle 19c. About 5.0 GB. `unzip -t` must pass. |
+| `LINUX.X64_193000_db_home_and_patches.zip` | Oracle 19c. About 5.0 GB. `unzip -t` must pass. |
 | `TNMS_LUX_R9.1.0.593.0_1904_Prerequisites.zip` | `installation.sh` and the Small Plus database template |
 | `TNMS_LUX_R9.1.0.593.0_1904.zip` | `TNMS.bin` |
 
@@ -473,7 +473,7 @@ That assignment prints nothing. The three tests below use it. An `unzip -t` that
 **Confirm by running:**
 
 ```bash
-unzip -t "$MEDIA/LINUX.X64_193000_db_home_and_patches (1).zip"
+unzip -t "$MEDIA/LINUX.X64_193000_db_home_and_patches.zip"
 ```
 
 **Expected output:**
@@ -481,7 +481,7 @@ unzip -t "$MEDIA/LINUX.X64_193000_db_home_and_patches (1).zip"
 The last line is:
 
 ```text
-No errors detected in compressed data of /home/azureuser/TNMS/resources/LINUX.X64_193000_db_home_and_patches (1).zip.
+No errors detected in compressed data of /home/azureuser/TNMS/resources/LINUX.X64_193000_db_home_and_patches.zip.
 ```
 
 **Confirm by running:**
@@ -514,7 +514,7 @@ No errors detected in compressed data of /home/azureuser/TNMS/resources/TNMS_LUX
 
 ```bash
 mkdir -p /opt/oracle/oramedia /home/tnms-layout/prereq /home/tnms-layout/installer
-unzip -o "$MEDIA/LINUX.X64_193000_db_home_and_patches (1).zip" -d /opt/oracle/oramedia
+unzip -o "$MEDIA/LINUX.X64_193000_db_home_and_patches.zip" -d /opt/oracle/oramedia
 unzip -o "$MEDIA/TNMS_LUX_R9.1.0.593.0_1904_Prerequisites.zip" -d /home/tnms-layout/prereq
 unzip -o "$MEDIA/TNMS_LUX_R9.1.0.593.0_1904.zip" -d /home/tnms-layout/installer
 ```
