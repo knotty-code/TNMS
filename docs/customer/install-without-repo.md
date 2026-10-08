@@ -52,11 +52,11 @@ ls -1 /tmp/install-tnms-wizard.sh \
 /tmp/TNMS_LUX_R9.1.0.593.0_1904.zip
 ```
 
-Leave `tnms-install.properties.in` unchanged. Section 1 does not use these files. After step 4, **Copy the install files** moves them from `/tmp` to `/opt/tnms-install` as root.
+Leave `tnms-install.properties.in` unchanged. Section 1 does not use these files. **Confirm the install files** moves them from `/tmp` to `/opt/tnms-install` and sets the permissions.
 
 ## Where the install files go
 
-> The five files are in `/tmp` from **Before you start**. After step 4 they move to the paths in this table. The script reads the properties file from `/opt/tnms-install`. One file without the other stops the script.
+> The five files are in `/tmp` from **Before you start**. **Confirm the install files** moves them to the paths in this table and sets the modes. The script reads the properties file from `/opt/tnms-install`. One file without the other stops the script.
 
 | Wizard file | Path on the server |
 | --- | --- |
@@ -64,9 +64,9 @@ Leave `tnms-install.properties.in` unchanged. Section 1 does not use these files
 | tnms-install.properties.in | /opt/tnms-install/tnms-install.properties.in |
 | Three vendor zip files | /opt/tnms-install/resources/ |
 
-`/opt` is the 1 TB volume from the pre-install guide. `/opt/oracle`, `/opt/nokia`, and `/opt/tnms-install` are directories on that volume. Move the five files from `/tmp` after `df` shows `/opt` on `datavg-optlv`.
+`/opt` is the 1 TB volume from the pre-install guide. `/opt/oracle`, `/opt/nokia`, and `/opt/tnms-install` are directories on that volume. Move the five files from `/tmp` only after `findmnt` shows `/opt` on `datavg-optlv`. That check is in **Confirm the install files**.
 
-Keep both wizard file names. Leave `tnms-install.properties.in` unchanged. The script writes the server IPv4 into a separate response file, `/root/tnms-install.properties`. Database passwords stay in `/root/tnms-db-credentials` from step 6. Leave those passwords out of the properties file. Leave both wizard files out of the `TNMS.bin` directory. **Copy the install files**, after step 4, moves the five files from `/tmp` onto the paths above. Run the script in step 9.
+Keep both wizard file names. Leave `tnms-install.properties.in` unchanged. The script writes the server IPv4 into a separate response file, `/root/tnms-install.properties`. Database passwords stay in `/root/tnms-db-credentials` from step 6. Leave those passwords out of the properties file. Leave both wizard files out of the `TNMS.bin` directory. **Confirm the install files** moves the five files from `/tmp` onto the paths above and sets the modes. Run the script in step 9.
 
 ## TNMS client login
 
@@ -112,26 +112,127 @@ Substitute the site address and names. Keep the paths and the SID unless the sit
 
 Password rule used for `SYS`, `SYSTEM`, and `tnmsdba`: 6 to 30 characters from `a-z`, `A-Z`, `0-9`, and `+ - _ { }`. `SYS` and `SYSTEM` are the same value. `tnmsdba` is a different value. The SFTP password is separate again.
 
-## Media to copy onto the server
+## Confirm the install files
 
-These three zip files are the Oracle and TNMS media. **Before you start** copies them to `/tmp` with the wizard files. **Copy the install files** then moves the zip files into `/opt/tnms-install/resources`.
+The five files are in `/tmp` from **Before you start**. This section checks that layout, moves the files onto the 1 TB volume, and sets the modes. Run it as root, before section 1.
 
-| File | Role |
-| --- | --- |
-| `LINUX.X64_193000_db_home_and_patches.zip` | Oracle 19c. About 5.0 GB. `unzip -t` must pass. |
-| `TNMS_LUX_R9.1.0.593.0_1904_Prerequisites.zip` | `installation.sh` and the Small Plus database template |
-| `TNMS_LUX_R9.1.0.593.0_1904.zip` | `TNMS.bin` |
+### Confirm `/tmp` and `/opt`
 
-The Oracle zip must contain these four members and no others:
+**Confirm by running:**
 
-- `LINUX.X64_193000_db_home.zip`
-- `p30869156_190000_Linux-x86-64.zip`
-- `p30894985_190000_Linux-x86-64.zip`
-- `p35775632_190000_Linux-x86-64.zip` (the installer uses this one on RHEL 9)
+```bash
+ls -1 /tmp/install-tnms-wizard.sh \
+  /tmp/tnms-install.properties.in \
+  /tmp/LINUX.X64_193000_db_home_and_patches.zip \
+  /tmp/TNMS_LUX_R9.1.0.593.0_1904_Prerequisites.zip \
+  /tmp/TNMS_LUX_R9.1.0.593.0_1904.zip
+findmnt -n -o SOURCE,SIZE,TARGET /opt
+df -h /opt
+```
 
-A shorter Oracle zip of about 3.7 GB with no end-of-archive record is incomplete. Leave it unused.
+**Expected output:**
 
-`TNMS_WIN_R9.1.0.593.0_1904.zip` is the Windows client. It is not part of this server install. `PUs/` in the Linux package was empty on this host, so no PDT zip was copied.
+`ls` prints the five `/tmp` paths. `findmnt` prints `/dev/mapper/datavg-optlv` and `1023.5G` on this image. `df` shows that same device, with `Avail` greater than 20G. Empty `findmnt` output, or `df` showing `rootvg-rootlv`, means `/opt` is still on the root filesystem. Stop and finish `docs/customer/pre-install.md` before copying anything onto `/opt`.
+
+When `ls /opt/tnms-install` already lists `install-tnms-wizard.sh` and `tnms-install.properties.in`, skip the move and run **Set the permissions**.
+
+### Move the files
+
+The wizard script and the properties file go in `/opt/tnms-install`. The three zip files go in `/opt/tnms-install/resources`.
+
+```bash
+install -d -o root -g root /opt/tnms-install /opt/tnms-install/resources
+install -o root -g root /tmp/install-tnms-wizard.sh /opt/tnms-install/install-tnms-wizard.sh
+install -o root -g root /tmp/tnms-install.properties.in /opt/tnms-install/tnms-install.properties.in
+install -o root -g root \
+  /tmp/LINUX.X64_193000_db_home_and_patches.zip \
+  /tmp/TNMS_LUX_R9.1.0.593.0_1904_Prerequisites.zip \
+  /tmp/TNMS_LUX_R9.1.0.593.0_1904.zip \
+  /opt/tnms-install/resources/
+rm -f /tmp/install-tnms-wizard.sh /tmp/tnms-install.properties.in \
+  /tmp/LINUX.X64_193000_db_home_and_patches.zip \
+  /tmp/TNMS_LUX_R9.1.0.593.0_1904_Prerequisites.zip \
+  /tmp/TNMS_LUX_R9.1.0.593.0_1904.zip
+```
+
+`install` prints nothing. `rm` prints nothing. The `/tmp` copies are removed.
+
+### Set the permissions
+
+Owner stays root. Group is `azureuser`, the SSH login.
+
+`/opt/tnms-install` and `/opt/tnms-install/resources` are mode `750`. Root can change them. `azureuser` can open them.
+
+`install-tnms-wizard.sh` is mode `740`. Root runs it in step 9. `azureuser` can read it.
+
+`tnms-install.properties.in` and the three zip files are mode `640`. `azureuser` can open the properties file. Saving that file is refused. The plaintext passwords stay in `/root` at mode `600`.
+
+```bash
+chgrp azureuser \
+  /opt/tnms-install \
+  /opt/tnms-install/resources \
+  /opt/tnms-install/install-tnms-wizard.sh \
+  /opt/tnms-install/tnms-install.properties.in \
+  /opt/tnms-install/resources/LINUX.X64_193000_db_home_and_patches.zip \
+  /opt/tnms-install/resources/TNMS_LUX_R9.1.0.593.0_1904_Prerequisites.zip \
+  /opt/tnms-install/resources/TNMS_LUX_R9.1.0.593.0_1904.zip
+chmod 750 /opt/tnms-install /opt/tnms-install/resources
+chmod 740 /opt/tnms-install/install-tnms-wizard.sh
+chmod 640 /opt/tnms-install/tnms-install.properties.in \
+  /opt/tnms-install/resources/LINUX.X64_193000_db_home_and_patches.zip \
+  /opt/tnms-install/resources/TNMS_LUX_R9.1.0.593.0_1904_Prerequisites.zip \
+  /opt/tnms-install/resources/TNMS_LUX_R9.1.0.593.0_1904.zip
+```
+
+`chgrp` and `chmod` print nothing.
+
+### Confirm the layout
+
+**Confirm by running:**
+
+```bash
+ls -l /opt/tnms-install
+```
+
+**Expected output:**
+
+Both wizard names are listed, plus the `resources` directory. The modes are the check. Sizes and dates follow the files. On RHEL the mode column ends with a dot.
+
+```text
+-rwxr-----. 1 root azureuser <size> <date> install-tnms-wizard.sh
+drwxr-x---. 2 root azureuser <size> <date> resources
+-rw-r-----. 1 root azureuser <size> <date> tnms-install.properties.in
+```
+
+**Confirm by running:**
+
+```bash
+ls -l /opt/tnms-install/resources
+```
+
+**Expected output:**
+
+Three zip files, each mode `640`, owner root, group `azureuser`.
+
+```text
+-rw-r-----. 1 root azureuser <size> <date> LINUX.X64_193000_db_home_and_patches.zip
+-rw-r-----. 1 root azureuser <size> <date> TNMS_LUX_R9.1.0.593.0_1904.zip
+-rw-r-----. 1 root azureuser <size> <date> TNMS_LUX_R9.1.0.593.0_1904_Prerequisites.zip
+```
+
+**Confirm by running:**
+
+```bash
+grep -c '@TNMS_IP@' /opt/tnms-install/tnms-install.properties.in
+```
+
+**Expected output:**
+
+```text
+7
+```
+
+`7` is the seven address fields the script fills in. `0` means this is the wrong file, or the file was edited. Replace it with the delivered `tnms-install.properties.in` and run the move again. Run `/opt/tnms-install/install-tnms-wizard.sh` in step 9.
 
 ## 1. Hostname, hosts, locale
 
@@ -451,111 +552,21 @@ ls -d /opt/oradata/ora1 /opt/oradata/ora2 /opt/oradata/ora3 /opt/tnms-install/re
 /opt/tnms-install/resources
 ```
 
-## Copy the install files
+## Confirm the files before unpacking
 
-Run this after the step 4 checks. `/opt/tnms-install` is on the 1 TB volume. `/tmp` is the 16 GB filesystem. The Oracle zip is about 5 GB.
-
-The five files should already be in `/tmp` from **Before you start**. Any SSH user can receive that copy. `/home` is about 1 GB, so a VS Code Remote SSH connection needs the symlink in pre-install section 6 before it can unpack. The five install files stay out of `/home` and are not copied straight into `/opt/tnms-install`. When a name is missing from `/tmp`, run this from the workstation directory that contains the five files:
-
-```bash
-scp install-tnms-wizard.sh tnms-install.properties.in \
-  LINUX.X64_193000_db_home_and_patches.zip \
-  TNMS_LUX_R9.1.0.593.0_1904_Prerequisites.zip \
-  TNMS_LUX_R9.1.0.593.0_1904.zip \
-  <user>@<server-ip>:/tmp/
-```
-
-`<user>` is the SSH account. `<server-ip>` is the server address. The command finishes when all five files have been copied. `Permission denied` or `No such file` means stop and fix the path before continuing.
-
-On the server, as root:
-
-```bash
-install -d -o root -g azureuser -m 750 /opt/tnms-install /opt/tnms-install/resources
-install -o root -g azureuser -m 740 /tmp/install-tnms-wizard.sh /opt/tnms-install/install-tnms-wizard.sh
-install -o root -g azureuser -m 640 /tmp/tnms-install.properties.in /opt/tnms-install/tnms-install.properties.in
-install -o root -g azureuser -m 640 \
-  /tmp/LINUX.X64_193000_db_home_and_patches.zip \
-  /tmp/TNMS_LUX_R9.1.0.593.0_1904_Prerequisites.zip \
-  /tmp/TNMS_LUX_R9.1.0.593.0_1904.zip \
-  /opt/tnms-install/resources/
-rm -f /tmp/install-tnms-wizard.sh /tmp/tnms-install.properties.in \
-  /tmp/LINUX.X64_193000_db_home_and_patches.zip \
-  /tmp/TNMS_LUX_R9.1.0.593.0_1904_Prerequisites.zip \
-  /tmp/TNMS_LUX_R9.1.0.593.0_1904.zip
-```
-
-`install` prints nothing. `rm` prints nothing. The `/tmp` copies are removed. The properties file remains only under `/opt/tnms-install`. Owner is root. Group is `azureuser`. The directory is mode `750`, the script is mode `740`, and `tnms-install.properties.in` is mode `640`. The SSH login can read the files. It cannot change them. Plaintext passwords stay in `/root`.
-
-When the files are already in place and VS Code reports `EACCES` on `tnms-install.properties.in`, the directory is still mode `700`. Set the group and mode in place:
-
-```bash
-chgrp azureuser /opt/tnms-install /opt/tnms-install/resources \
-  /opt/tnms-install/install-tnms-wizard.sh \
-  /opt/tnms-install/tnms-install.properties.in
-chmod 750 /opt/tnms-install /opt/tnms-install/resources
-chmod 740 /opt/tnms-install/install-tnms-wizard.sh
-chmod 640 /opt/tnms-install/tnms-install.properties.in
-if compgen -G '/opt/tnms-install/resources/*.zip' > /dev/null; then
-  chgrp azureuser /opt/tnms-install/resources/*.zip
-  chmod 640 /opt/tnms-install/resources/*.zip
-fi
-```
-
-`chgrp` and `chmod` print nothing. `compgen` prints nothing when no zip is present yet.
+**Confirm the install files** already moved the five files and set the modes. Run the checks again before unpacking. A missing name means return to that section. Leave the files where they are.
 
 **Confirm by running:**
 
 ```bash
-ls -l /opt/tnms-install
-```
-
-**Expected output:**
-
-Both wizard names are listed, plus the `resources` directory. The modes are the check. Sizes and dates follow the files you copied. On RHEL the mode column ends with a dot.
-
-```text
--rwxr-----. 1 root azureuser <size> <date> install-tnms-wizard.sh
-drwxr-x---. 2 root azureuser <size> <date> resources
--rw-r-----. 1 root azureuser <size> <date> tnms-install.properties.in
-```
-
-**Confirm by running:**
-
-```bash
-ls -1 /opt/tnms-install/resources
-```
-
-**Expected output:**
-
-```text
-LINUX.X64_193000_db_home_and_patches.zip
-TNMS_LUX_R9.1.0.593.0_1904.zip
-TNMS_LUX_R9.1.0.593.0_1904_Prerequisites.zip
-```
-
-**Confirm by running:**
-
-```bash
+ls -l /opt/tnms-install /opt/tnms-install/resources
 grep -c '@TNMS_IP@' /opt/tnms-install/tnms-install.properties.in
-```
-
-**Expected output:**
-
-```text
-7
-```
-
-`7` is the seven address fields the script fills in. `0` means this is the wrong file, or the file was edited. Replace it with the delivered `tnms-install.properties.in` and run the `install` commands again. Run `/opt/tnms-install/install-tnms-wizard.sh` in step 9.
-
-**Confirm by running:**
-
-```bash
 df -h /opt/tnms-install /
 ```
 
 **Expected output:**
 
-On this layout, `/opt/tnms-install` is the large filesystem and `/` is about 8G with several GB free. When `/` was already large before step 4, both paths are that root filesystem.
+`/opt/tnms-install` lists the script at mode `740`, `resources` at mode `750`, and the properties file at mode `640`. Group is `azureuser`. `resources` lists the three zip files at mode `640`. `grep` prints `7`. `/opt/tnms-install` is the 1 TB volume. `/` is about 8G with several GB free.
 
 ## 5. Unpack the media
 
@@ -566,6 +577,8 @@ MEDIA=/opt/tnms-install/resources
 ```
 
 That assignment prints nothing. The three tests below use it. An `unzip -t` that stops before `No errors detected` is an incomplete zip. Replace that file before continuing.
+
+The Oracle zip is about 5.0 GB. It contains `LINUX.X64_193000_db_home.zip`, `p30869156_190000_Linux-x86-64.zip`, `p30894985_190000_Linux-x86-64.zip`, and `p35775632_190000_Linux-x86-64.zip`. A shorter Oracle zip of about 3.7 GB with no end-of-archive record is incomplete. Leave it unused. `TNMS_WIN_R9.1.0.593.0_1904.zip` is the Windows client. It is not part of this server install. `PUs/` in the Linux package was empty on this host, so no PDT zip was copied.
 
 **Confirm by running:**
 
@@ -833,7 +846,7 @@ Small Plus refuses to continue until `lsmem --summary` reports at least 32G. Thi
 
 `TNMS.bin` rejects `-i console` (`Installer User Interface Mode Not Supported`). The recorded run wrote a response file, and that file sets `INSTALLER_UI=silent`. One script replays those choices. There is no second SSH session and no screenshot. To answer the screens yourself from two SSH sessions, use [Manual step 9](#manual-step-9-two-ssh-sessions) at the bottom of this guide instead of the script. Do not do both.
 
-The script is `/opt/tnms-install/install-tnms-wizard.sh`, in the same directory as `tnms-install.properties.in`. Both files were copied in **Copy the install files**. If either file is missing, stop and complete that section. The script reads `SYS_PASSWORD` and `TNMSDBA_PASSWORD` from `/root/tnms-db-credentials`, writes the server IPv4 into the response file, and runs `TNMS.bin -f /root/tnms-install.properties`. On a host with less than 32 GB it installs the `lsmem` wrapper for that run and removes the wrapper before it exits. It refuses to start when `/opt/nokia/tnms/server` already exists.
+The script is `/opt/tnms-install/install-tnms-wizard.sh`, in the same directory as `tnms-install.properties.in`. Both files were placed in **Confirm the install files**. If either file is missing, stop and complete that section. The script reads `SYS_PASSWORD` and `TNMSDBA_PASSWORD` from `/root/tnms-db-credentials`, writes the server IPv4 into the response file, and runs `TNMS.bin -f /root/tnms-install.properties`. On a host with less than 32 GB it installs the `lsmem` wrapper for that run and removes the wrapper before it exits. It refuses to start when `/opt/nokia/tnms/server` already exists.
 
 Run it as root, in the same SSH session:
 

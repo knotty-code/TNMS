@@ -445,4 +445,4 @@ The date and the link size follow the VM. Connect again as `azureuser`. New serv
 
 ## 7. Next
 
-Continue with `docs/customer/install-without-repo.md`. Before section 1 of that guide, copy `install-tnms-wizard.sh`, `tnms-install.properties.in`, and the three vendor zip files to `/tmp`. After the disk checks, that guide moves them into `/opt/tnms-install`. The properties file stays beside the script. The unpacked prerequisites and `TNMS.bin` go under `/opt/tnms-install/prereq` and `/opt/tnms-install/installer`.
+Continue with `docs/customer/install-without-repo.md`. Before section 1 of that guide, copy `install-tnms-wizard.sh`, `tnms-install.properties.in`, and the three vendor zip files to `/tmp`. **Confirm the install files** in that guide moves them into `/opt/tnms-install` and sets the permissions. The properties file stays beside the script. The unpacked prerequisites and `TNMS.bin` go under `/opt/tnms-install/prereq` and `/opt/tnms-install/installer`.
