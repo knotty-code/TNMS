@@ -66,10 +66,10 @@ findmnt -n -o SOURCE,SIZE,TARGET /opt
 
 **Expected output:**
 
-One line. `SOURCE` is `/dev/mapper/datavg-optlv` and `SIZE` is `1023.5G` on this image. Empty output means `/opt` is not a mount. Stop and finish the pre-install guide before creating these directories.
+One line. `SOURCE` is `/dev/mapper/datavg-optlv` and `SIZE` is `1023.4G` on this image. Empty output means `/opt` is not a mount. Stop and finish the pre-install guide before creating these directories.
 
 ```text
-/dev/mapper/datavg-optlv 1023.5G /opt
+/dev/mapper/datavg-optlv 1023.4G /opt
 ```
 
 `/opt/oracle` holds the database software. `/opt/nokia` holds the TNMS software. `/opt/tnms-data` is the TNMS data directory. `/opt/oradata` holds `ora1`, `ora2`, and `ora3`. Pre-install bind-mounts `/opt/tnms-data` on `/nokia` and `/opt/oradata` on `/oradata`. `/opt/tnms-install` holds the wizard files. `/opt/tnms-install/resources` holds the three zip files.
@@ -201,7 +201,7 @@ df -h /opt
 
 **Expected output:**
 
-`ls` prints the five `/tmp` paths. `findmnt` prints `/dev/mapper/datavg-optlv` and `1023.5G` on this image. `df` shows that same device, with `Avail` greater than 20G. Empty `findmnt` output, or `df` showing `rootvg-rootlv`, means `/opt` is still on the root filesystem. Stop and finish `docs/customer/pre-install.md` before copying anything onto `/opt`.
+`ls` prints the five `/tmp` paths. `findmnt` prints `/dev/mapper/datavg-optlv` and `1023.4G` on this image. `df` shows that same device, with `Avail` greater than 20G. Empty `findmnt` output, or `df` showing `rootvg-rootlv`, means `/opt` is still on the root filesystem. Stop and finish `docs/customer/pre-install.md` before copying anything onto `/opt`.
 
 When `ls /opt/tnms-install` already lists `install-tnms-wizard.sh` and `tnms-install.properties.in`, skip the move and run **Set the permissions**.
 

@@ -101,8 +101,10 @@ id
 **Expected output:**
 
 ```text
-uid=0(root) gid=0(root) groups=0(root)
+uid=0(root) gid=0(root) groups=0(root) context=unconfined_u:unconfined_r:unconfined_t:s0-s0:c0.c1023
 ```
+
+The `context=` field is present while SELinux is enforcing. The range after `s0` follows the policy.
 
 `lvs` in the `azureuser` shell stops with `Permission denied` on `/run/lock/lvm/P_global:aux`. That message means the shell is still `azureuser`. Run `sudo -i` again.
 
@@ -144,6 +146,8 @@ Two disks. One is about 64G. One is about 1T. Names vary. On the reference serve
 nvme0n1  64G disk
 nvme0n2   1T disk
 ```
+
+`sr0` at about 630K is the virtual DVD. It is not a third disk.
 
 **Confirm by running:**
 
@@ -235,12 +239,32 @@ One line, about `1T`, with no filesystem type and no mountpoint. Any other line 
 
 ```bash
 parted -s "$DATA_DISK" mklabel gpt
-parted -s "$DATA_DISK" mkpart primary 1MiB 100%
+parted -a optimal -s "$DATA_DISK" mkpart primary 0% 100%
 parted -s "$DATA_DISK" set 1 lvm on
 udevadm settle
 ```
 
 `parted` prints nothing in script mode. `udevadm` prints nothing.
+
+`mkpart primary 1MiB 100%` on this NVMe disk prints a warning and leaves the partition misaligned. `optimal_io_size` is 33554432 bytes, which is 32 MiB. `-a optimal` with `0%` starts the partition at sector 65536.
+
+```text
+Warning: The resulting partition is not properly aligned for best performance: 2048s % 65536s != 0s
+```
+
+**Confirm by running:**
+
+```bash
+parted "$DATA_DISK" align-check optimal 1
+```
+
+**Expected output:**
+
+```text
+1 aligned
+```
+
+Stop when that command exits with an error. The partition has to be recreated before `pvcreate`.
 
 ```bash
 if [[ -b ${DATA_DISK}p1 ]]; then DATA_PART=${DATA_DISK}p1; else DATA_PART=${DATA_DISK}1; fi
@@ -278,10 +302,10 @@ findmnt -n -o SOURCE,SIZE,TARGET /opt
 
 **Expected output:**
 
-One line. `SOURCE` is `/dev/mapper/datavg-optlv` and `SIZE` is `1023.5G` on this image. That is the 1 TB disk.
+One line. `SOURCE` is `/dev/mapper/datavg-optlv` and `SIZE` is `1023.4G` on this image. That is the 1 TB disk after the 32 MiB alignment above.
 
 ```text
-/dev/mapper/datavg-optlv 1023.5G /opt
+/dev/mapper/datavg-optlv 1023.4G /opt
 ```
 
 Empty output means `/opt` is not a mount. `/opt` is still a directory on the 8 GB root filesystem. Stop and repeat the `mount` command. Section 4 writes an 18 GB file under `/opt`.
@@ -310,7 +334,7 @@ df -h /opt
 `findmnt` prints one line for `/dev/mapper/datavg-optlv`. Empty `findmnt` output means `/opt` is not a mount. `df` shows that same device, with `Avail` about `1T` and greater than 20G. Continue to `dd` only when both are true. `df` showing `rootvg-rootlv` and a size of about 8G means `/opt` is still on the root filesystem. `dd` then stops with `No space left on device` after about 7.9 GiB and leaves `/` full.
 
 ```text
-/dev/mapper/datavg-optlv 1023.5G /opt
+/dev/mapper/datavg-optlv 1023.4G /opt
 Filesystem                Size  Used Avail Use% Mounted on
 /dev/mapper/datavg-optlv  1.0T  7.2G 1017G   1% /opt
 ```
@@ -363,10 +387,28 @@ mount -a
 `cat`, `systemctl`, and `mount` print nothing.
 
 ```bash
-restorecon -RF /opt/oracle /opt/nokia /opt/tnms-install /opt/tnms-data /opt/oradata /nokia /oradata
+restorecon -RF /opt
+chcon -t swapfile_t /opt/swapfile
 ```
 
-The command prints a line for each directory it relabels, or nothing when the labels are already right.
+`restorecon` prints a line for each file it relabels. On this disk the fresh filesystem root is `unlabeled_t`, and `/opt/tnms-data` and `/opt/oradata` are `default_t`. The command moves those to `usr_t`. `chcon` prints nothing.
+
+`/nokia` and `/oradata` are the same inodes as `/opt/tnms-data` and `/opt/oradata`. `restorecon` on `/nokia` or `/oradata` applies `default_t` and overwrites `usr_t`. Leave those two paths out of `restorecon`. `restorecon -RF /opt` also labels `/opt/swapfile` as `usr_t`. The `chcon` puts `swapfile_t` back. That is the type `swapon` set when the file was activated.
+
+**Confirm by running:**
+
+```bash
+stat -c '%C %n' /opt /opt/tnms-data /opt/oradata /opt/swapfile
+```
+
+**Expected output:**
+
+```text
+system_u:object_r:usr_t:s0 /opt
+system_u:object_r:usr_t:s0 /opt/tnms-data
+system_u:object_r:usr_t:s0 /opt/oradata
+system_u:object_r:swapfile_t:s0 /opt/swapfile
+```
 
 ## 5. Checks
 
