@@ -859,6 +859,27 @@ TNMSDBA_PASSWORD=Tnc25xQ36XBUa9
 
 Silent Small Plus. The 32 GB memory check fails on a 16 GB server and the script continues because `-silent_mode=Y` is set. Wait until the log prints `Final status of the execution: Success`. The run on this host took about 23 minutes and exited 0.
 
+`/opt/tnms-install` is mode `750`. `installation.sh` runs `runInstaller` as `oracle`. That account cannot enter the directory, so the installer stops with `[INS-10101] The given response file .../TNMS.rsp is not found.` The real log is `/tmp/InstallActions*/installActions*.log`. Give `oracle` execute permission on the directory before the script. The files inside stay mode `640` and `740`.
+
+```bash
+chmod o+x /opt/tnms-install
+```
+
+That command prints nothing.
+
+**Confirm by running:**
+
+```bash
+sudo -u oracle test -r /opt/tnms-install/prereq/TNMS_Prerequisites/Oracle/installation/TNMS.rsp
+echo $?
+```
+
+**Expected output:**
+
+```text
+0
+```
+
 ```bash
 unset http_proxy https_proxy HTTP_PROXY HTTPS_PROXY no_proxy NO_PROXY
 set -a
