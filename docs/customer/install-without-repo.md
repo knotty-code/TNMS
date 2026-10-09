@@ -335,9 +335,24 @@ grep -c '@TNMS_IP@' /opt/tnms-install/tnms-install.properties.in
 
 ```bash
 hostnamectl set-hostname TNMS
+sed -i 's/^preserve_hostname:.*/preserve_hostname: true/' /etc/cloud/cloud.cfg
 ```
 
-That command prints nothing.
+`hostnamectl` prints nothing. `sed` prints nothing.
+
+The Azure image ships `preserve_hostname: false`. Cloud-init would set the hostname back to the VM name `TNMSv3` on the next boot. `preserve_hostname: true` keeps `TNMS`.
+
+**Confirm by running:**
+
+```bash
+grep '^preserve_hostname:' /etc/cloud/cloud.cfg
+```
+
+**Expected output:**
+
+```text
+preserve_hostname: true
+```
 
 **Confirm by running:**
 
@@ -373,13 +388,30 @@ The output includes this line:
 LANG=en_US.UTF-8
 ```
 
-`/etc/hosts` needs the server address, the FQDN, and the short name:
+`/etc/hosts` needs the server address, the FQDN, and the short name. Append the address line. `DOMAIN` is the `search` value in `/etc/resolv.conf`. On this VM that value is `m4zuuapewrhure0hzyoxrznrnc.gx.internal.cloudapp.net`. The FQDN from the earlier server, `TNMS.vmefr40i5gquree1lezspcyb0c.gx.internal.cloudapp.net`, belongs to that server.
+
+```bash
+DOMAIN=$(awk '/^search / {print $2; exit}' /etc/resolv.conf)
+grep -qE '[[:space:]]TNMS([[:space:]]|$)' /etc/hosts || printf '%s\n' "172.16.0.4  TNMS.${DOMAIN} TNMS" >> /etc/hosts
+```
+
+The `grep` prints nothing when the line is already present. `printf` prints nothing.
+
+**Confirm by running:**
+
+```bash
+cat /etc/hosts
+```
+
+**Expected output:**
 
 ```text
 127.0.0.1   localhost localhost.localdomain localhost4 localhost4.localdomain4
 ::1         localhost localhost.localdomain localhost6 localhost6.localdomain6
-172.16.0.4  TNMS.vmefr40i5gquree1lezspcyb0c.gx.internal.cloudapp.net TNMS
+172.16.0.4  TNMS.m4zuuapewrhure0hzyoxrznrnc.gx.internal.cloudapp.net TNMS
 ```
+
+The name after the address is the FQDN. The short name is last. Reversing those two makes `hostname --fqdn` print `TNMS`.
 
 **Confirm by running:**
 
@@ -390,20 +422,22 @@ hostname --fqdn
 **Expected output:**
 
 ```text
-TNMS.vmefr40i5gquree1lezspcyb0c.gx.internal.cloudapp.net
+TNMS.m4zuuapewrhure0hzyoxrznrnc.gx.internal.cloudapp.net
 ```
 
 **Confirm by running:**
 
 ```bash
-getent hosts TNMS
+getent -s files hosts TNMS
 ```
 
 **Expected output:**
 
 ```text
-172.16.0.4      TNMS.vmefr40i5gquree1lezspcyb0c.gx.internal.cloudapp.net TNMS
+172.16.0.4      TNMS.m4zuuapewrhure0hzyoxrznrnc.gx.internal.cloudapp.net TNMS
 ```
+
+`getent hosts TNMS` returns the IPv6 link-local address. `nss-myhostname` answers the live hostname before `/etc/hosts`. `getent ahosts TNMS` and `getent -s files hosts TNMS` return `172.16.0.4`.
 
 **Confirm by running:**
 
@@ -471,14 +505,16 @@ One line per package, and none of them says `is not installed`. On this host the
 
 ## 3. Kernel settings and the firewall
 
-Write `/etc/sysctl.d/99-tnms.conf`:
-
-```text
+```bash
+cat > /etc/sysctl.d/99-tnms.conf << 'EOF'
 vm.swappiness = 1
 vm.dirty_ratio = 15
 vm.dirty_background_ratio = 3
 vm.min_free_kbytes = 1048576
+EOF
 ```
+
+`cat` prints nothing.
 
 ```bash
 sysctl --system
@@ -510,6 +546,7 @@ systemctl disable firewalld
 
 ```text
 Removed /etc/systemd/system/multi-user.target.wants/firewalld.service.
+Removed /etc/systemd/system/dbus-org.fedoraproject.FirewallD1.service.
 ```
 
 **Confirm by running:**
