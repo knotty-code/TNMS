@@ -1,5 +1,77 @@
 # TNMS 9.1 on RHEL 8 — pre-install for a new VM
 
+## Starting point — TNMSv3, 2026-10-09
+
+This is the VM the procedure below starts from. The figures were read over SSH at 2026-10-09 14:05 UTC, about seven minutes after boot. `cloud-init status` was `done`. Sections 2 through 6 have not been applied. The layout matches the new-image sizes in section 1: `rootlv` and `tmplv` are 2 GB, and `homelv` is 1 GB.
+
+### Access
+
+| Item | Value |
+| --- | --- |
+| SSH | `azureuser@48.214.144.237`, key `TNMSv3_key.pem`. The Azure OS profile has password authentication disabled. |
+| Root shell | `sudo -i` from `azureuser` runs without a password. |
+| Guest IPv4 | `172.16.0.4/24` on `eth0`. Gateway `172.16.0.1`. DNS `168.63.129.16`. Search domain `m4zuuapewrhure0hzyoxrznrnc.gx.internal.cloudapp.net`. |
+| Prompt | `[root@TNMSv3 ~]#` |
+| Accounts | `root` and `azureuser` (uid 1000, groups `azureuser`, `adm`, `systemd-journal`). `/home/azureuser` has the image skeleton and `.ssh` only. |
+
+`enP10322s1` is a slave of `eth0`. Both use MAC `00:22:48:48:90:91`. The address is on `eth0`.
+
+### Machine
+
+| Item | Value |
+| --- | --- |
+| Azure | Public cloud, resource group `sr-academy`, subscription `734cc95c-8d15-4624-bc63-e0f1ea2d1050`, region `centralus`, availability zone 1 |
+| Size | `Standard_D8als_v6` |
+| Image | Red Hat offer `RHEL`, SKU `810-gen2`, version `8.10.2026061712` |
+| OS | Red Hat Enterprise Linux 8.10 (Ootpa), kernel `4.18.0-553.134.1.el8_10.x86_64` |
+| CPU | 8 vCPU. AMD EPYC 9V74. 1 socket, 4 cores, 2 threads per core. |
+| Memory | `MemTotal` 16133412 kB. The section 1 check prints `15 GB`. About 14 GB was available. |
+| Time | Time zone `Etc/UTC`. NTP is synchronized. |
+| SELinux | Enforcing. Policy `targeted`. Config file mode is enforcing. |
+| Firmware | Secure Boot enabled. vTPM enabled. |
+| Boot | 2026-10-09 13:59 UTC |
+| Guest agent | `waagent` active. WALinuxAgent 2.7.0.6. Goal state agent 2.16.0.2. |
+| Repos | `subscription-manager` overall status is `Not registered`. Enabled repos are the Azure RHUI set: BaseOS, AppStream, Supplementary, CodeReady Builder, Ansible Engine 2, and `rhui-microsoft-azure-rhel8`. |
+| Updates | `dnf check-update -q` listed 163 packages. That refresh left `/var` at 856M used. The table below records `/var` before the refresh. |
+
+### Disks
+
+OS disk `nvme0n1`, 64 GB, Azure Standard SSD LRS, caching ReadWrite. `rootvg` is on `nvme0n1p2` and has about 40 GB free. `/boot` is 500 MB xfs (111 MB used). `/boot/efi` is 495 MB vfat (6 MB used).
+
+| LV | Size | Mount | Used |
+| --- | --- | --- | --- |
+| `rootlv` | 2.00g | `/` | 75M of 2.0G (4%) |
+| `usrlv` | 10.00g | `/usr` | 2.7G of 10G (27%) |
+| `varlv` | 8.00g | `/var` | 371M of 8.0G (5%) |
+| `tmplv` | 2.00g | `/tmp` | 47M of 2.0G (3%) |
+| `homelv` | 1.00g | `/home` | 40M of 1014M (4%) |
+
+`/tmp` options are `rw,relatime,seclabel,attr2,inode64,logbufs=8,logbsize=32k,noquota`.
+
+Data disk `nvme0n2`, 1 TB. Azure disk `TNMSv3_DataDisk_0`, Standard SSD LRS, LUN 0, host caching ReadOnly, create option Empty. `blkid` prints no signature. The disk has no partition, no filesystem, and no mount.
+
+`/opt` is an empty directory on `rootvg-rootlv`. These paths are absent: `/nokia`, `/oradata`, `/opt/oracle`, `/opt/nokia`, `/opt/tnms-data`, `/opt/tnms-install`.
+
+Swap is 0. `/etc/fstab` lists `rootvg-rootlv`, `rootvg-homelv`, `rootvg-tmplv`, `rootvg-usrlv`, `rootvg-varlv`, `/boot`, and `/boot/efi`.
+
+### Software and listeners
+
+The running services are the base image: `sshd`, `firewalld`, `chronyd`, `waagent`, `hypervkvpd`, `NetworkManager`, `tuned`, and the usual RHEL 8 units. No Oracle, TNMS, nginx, or Java process is running. `oracle-database-preinstall-19c`, `java-11-openjdk`, and `nginx` are not installed. `bc`, `unzip`, `wget`, `libaio`, and `net-tools` are installed.
+
+`firewalld` is active. Zone `public` allows `cockpit`, `dhcpv6-client`, and `ssh`. Listening TCP ports are 22 (`sshd`) and 5355 (`systemd-resolved`).
+
+### Where the procedure starts
+
+Section 1 matches this VM. `nproc` is 8. Memory prints `15 GB`. `lsblk` shows `nvme0n1` at 64G and `nvme0n2` at 1T. `lvs` shows the five `rootvg` volumes in the table above.
+
+Section 2 grows `rootlv` to 8 GB and `tmplv` to 16 GB. Both are 2 GB. `/` has 2.0 GB free, and `TNMS.bin` needs about 4,531 MB free on `/`.
+
+Section 3 uses `DATA_DISK=/dev/nvme0n2`. That disk is empty.
+
+Section 4 creates the product directories, the `/nokia` and `/oradata` bind mounts, and the 18 GB swap file, then appends them to `/etc/fstab`.
+
+Section 5 is the check after those steps. Section 6 applies before VS Code Remote SSH. `/home` is 1014M, and `/home/azureuser/.vscode-server` is absent.
+
 Run this on a new Red Hat Enterprise Linux 8 VM before [install-without-repo.md](install-without-repo.md). The VM matches the resources of the server that already has TNMS 9.1 installed. This guide builds the disk layout. The install guide installs Oracle and TNMS.
 
 Run the commands as root. Section 1 opens that shell from the `azureuser` login. The prompt ends with `#`.
