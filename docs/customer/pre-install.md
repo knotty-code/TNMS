@@ -80,46 +80,6 @@ Leave the existing TNMS server as it is. Its 1 TB volume is mounted on `/home`.
 
 A line that says **Confirm by running** is a separate command. Run that command. The next **Expected output** block is what that command should print. A work command that prints nothing is finished when the shell prompt returns. Sizes move with the disk.
 
-## Where the software goes
-
-Install the product on `/opt`. That is the filesystem location for add-on software, and it is Nokia's default.
-
-| Path | Role |
-| --- | --- |
-| `/opt` | The 1 TB data disk |
-| `/opt/oracle` | Oracle software. The database zip is unpacked in `/opt/oracle/oramedia`. |
-| `/opt/nokia/tnms` | TNMS software. The installer creates this path. |
-| `/opt/tnms-install` | Wizard script, properties file, zip files, and the unpacked installer. Mode `750`, group `azureuser`. |
-| `/nokia` | TNMS data. Bind mount from `/opt/tnms-data`. The installer requires this path. |
-| `/oradata` | Database files in `ora1`, `ora2`, and `ora3`. Bind mount from `/opt/oradata`. |
-| `/home` | Login account. Small volume on the OS disk. |
-| `/root` | `tnms-db-credentials`, the generated response file, and `tnms-wizard.log`. |
-
-`/usr/local` is for software built on the machine. `/var` on this layout is 8 GB. `/home` is for user accounts. The first install put the 1 TB disk on `/home` and bind-mounted the product out of `/home/tnms-layout`. Those files were labeled `user_home_t`, and the first `scs_daemon` start failed until `restorecon`.
-
-> The Nokia Small Plus table asks for a 150 GB `/`, 100 GB swap, 50 GB `/tmp`, separate `oradata` volumes of 300 GB, 300 GB, and 150 GB, and a 150 GB `/nokia`. This VM matches the machine already installed: 8 vCPU, 16 GB RAM, a 64 GB OS disk, a 1 TB data disk, and 18 GB swap.
-
-## Resources to request
-
-| Item | Value |
-| --- | --- |
-| OS | Red Hat Enterprise Linux 8, x86_64 |
-| CPU | 8 vCPU |
-| Memory | 16 GB |
-| OS disk | 64 GB |
-| Data disk | 1 TB, empty, separate from the OS disk |
-| `/` | 8 GB (`rootvg/rootlv`) |
-| `/usr` | 10 GB (`rootvg/usrlv`) |
-| `/var` | 8 GB (`rootvg/varlv`) |
-| `/tmp` | 16 GB (`rootvg/tmplv`), executable |
-| `/boot` | 500 MB |
-| `/boot/efi` | 495 MB |
-| `/home` | About 1 GB on the OS disk (`1014M` on this image) |
-| Swap | 18 GB, file `/opt/swapfile` |
-| SELinux | Enforcing |
-
-Oracle port 1521 stays closed to the network. The install guide opens the client on TCP 8444.
-
 ## 1. Confirm the VM
 
 Log in as `azureuser`, then open a root shell. Every command after this one runs in that shell.
