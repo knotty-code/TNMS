@@ -233,7 +233,7 @@ grep -c '@TNMS_IP@' /opt/tnms-install/tnms-install.properties.in
 
 `/opt` is the 1 TB volume from the pre-install guide. `/opt/oracle`, `/opt/nokia`, and `/opt/tnms-install` are directories on that volume. **Move the files out of /tmp** runs only after `findmnt` shows `/opt` on `datavg-optlv`.
 
-Keep both wizard file names. Leave `tnms-install.properties.in` unchanged. The script writes the server IPv4 into a separate response file, `/root/tnms-install.properties`. Database passwords stay in `/root/tnms-db-credentials` from step 6. Leave those passwords out of the properties file. Leave both wizard files out of the `TNMS.bin` directory. Run the script in step 9.
+Keep both wizard file names. Leave `tnms-install.properties.in` as delivered. That file sets `USER_INSTALL_DIR`, `USER_INSTALL_DIR_TMP`, `USER_DATA_DIR`, `ORACLE_INSTALL_DIR`, and `ORACLE_DATA_DIR`. The script writes the server IPv4 into a separate response file, `/root/tnms-install.properties`. Database passwords stay in `/root/tnms-db-credentials` from step 6. Leave those passwords out of the properties file. Leave both wizard files out of the `TNMS.bin` directory. Run the script in step 9.
 
 ## TNMS client login
 
@@ -329,7 +329,26 @@ grep -c '@TNMS_IP@' /opt/tnms-install/tnms-install.properties.in
 7
 ```
 
-`7` is the seven address fields the script fills in. `0` means this is the wrong file, or the file was edited. Replace it with the delivered `tnms-install.properties.in` and run the move again. Run `/opt/tnms-install/install-tnms-wizard.sh` in step 9.
+`7` is the seven address fields the script fills in. `0` means this is the wrong file, or the file was edited. Replace it with the delivered `tnms-install.properties.in` and run the move again.
+
+**Confirm by running:**
+
+```bash
+grep -E '^(USER_INSTALL_DIR|USER_INSTALL_DIR_TMP|USER_DATA_DIR|ORACLE_INSTALL_DIR|ORACLE_DATA_DIR)=' \
+  /opt/tnms-install/tnms-install.properties.in
+```
+
+**Expected output:**
+
+```text
+USER_INSTALL_DIR=/opt/nokia/tnms
+USER_INSTALL_DIR_TMP=/opt/nokia/tnms
+USER_DATA_DIR=/nokia/tnms
+ORACLE_INSTALL_DIR=/opt/oracle
+ORACLE_DATA_DIR=/oradata
+```
+
+A missing line leaves that installer variable empty. `TNMS.bin` then stops with `Invalid install directory!`. The installer action that fills these paths runs only when `INSTALLER_UI` is not `SILENT`. This response file is silent, so the paths are in the file. On Linux the folder check reads `USER_INSTALL_DIR_TMP`. Run `/opt/tnms-install/install-tnms-wizard.sh` in step 9.
 
 ## 1. Hostname, hosts, locale
 
@@ -1034,7 +1053,8 @@ The script selects the same choices this host used:
 | Package | TNMS Server and Mediation (`Server+NetServer`) |
 | Transport Controller | off. Ports 12443 and 12351 stay unused |
 | Hardware | Small Plus |
-| Users, groups, directories | the product defaults |
+| Users and groups | product defaults: `tnms`, `tnms`, `tnms_sftp`, `oracle`, `dba` |
+| Directories | `/opt/nokia/tnms`, `/nokia/tnms`, `/opt/oracle`, `/oradata`, from the properties file |
 | Database | New. Host `127.0.0.1`, port `1521`, user `tnmsdba`, SID `TNMS`, Oracle home `/opt/oracle/product/19c/dbhome_1` |
 | `sys` password | `SYS_PASSWORD` from step 6 |
 | `tnmsdba` password | `TNMSDBA_PASSWORD` from step 6 |

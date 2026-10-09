@@ -29,6 +29,16 @@ HW_TINY_CONFIG=0
 USERS_SELECTED=0
 DIRECTORIES_SELECTED=0
 
+#Deployment directories
+#----------------------
+# The installer fills these in only when INSTALLER_UI is not SILENT.
+# On Linux the folder check reads USER_INSTALL_DIR_TMP.
+USER_INSTALL_DIR=/opt/nokia/tnms
+USER_INSTALL_DIR_TMP=/opt/nokia/tnms
+USER_DATA_DIR=/nokia/tnms
+ORACLE_INSTALL_DIR=/opt/oracle
+ORACLE_DATA_DIR=/oradata
+
 #Network Interface Selection Panel
 #---------------------------------
 SERVER_FRONTEND_IP=@TNMS_IP@
