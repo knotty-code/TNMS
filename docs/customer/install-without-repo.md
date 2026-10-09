@@ -1044,7 +1044,7 @@ On this 19.7 database the line above that is:
 Known SQL error kept: ORA-02065 on _bug33046179_kqr_hot_copy_sleep_limit
 ```
 
-`<n>` is the installer exit code. The finished line is the check, including when `<n>` is not 0. A line that says `TNMS wizard failed` means stop. Read `/root/tnms-wizard.log`. Do not start the script a second time until that failure is understood.
+`<n>` is the installer exit code. The finished line is the check, including when `<n>` is not 0. On this host `<n>` was 255, and the known SQL error line was printed above the finished line. A line that says `TNMS wizard failed` means stop. Read `/root/tnms-wizard.log`. Do not start the script a second time until that failure is understood.
 
 The script selects the same choices this host used:
 
@@ -1211,6 +1211,21 @@ file /usr/bin/lsmem
 The command asks for the new password twice. Type `Tsvb5-Xe8ou3wR9` both times. It ends with:
 
 ```text
+passwd: all authentication tokens updated successfully.
+```
+
+A root shell with no terminal prompt uses `passwd --stdin`. It prints the same success line.
+
+```bash
+passwd --stdin tnms_sftp << 'EOF'
+Tsvb5-Xe8ou3wR9
+EOF
+```
+
+**Expected output:**
+
+```text
+Changing password for user tnms_sftp.
 passwd: all authentication tokens updated successfully.
 ```
 
@@ -1526,7 +1541,7 @@ Each row is one command. Run the command in the Check column. The Expected outpu
 | `hostname --fqdn` | the site FQDN |
 | `grep TNMS /etc/oratab` | `TNMS:/opt/oracle/product/19c/dbhome_1:Y` |
 | `ss -ltn \| grep 1521` | listener on 1521 |
-| `grep -F 'Final status of the execution:' /home/oracle/ossnms_installation_log/oracle_installation_*.log` | `Final status of the execution: Success` |
+| `grep -F 'Final status of the execution:' /home/oracle/ossnms_installation_log/oracle_installation_*.log` | `Final status of the execution: Success` in the newest log. An earlier failed attempt keeps its own line. |
 | `lsmem --summary` | the real RAM, and `/usr/bin/lsmem` is not a script |
 | `. /etc/profile.d/ossnms.sh` | returns with no error |
 | `passwd -S tnms` | locked |
