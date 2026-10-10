@@ -515,8 +515,8 @@ lrwxrwxrwx. 1 azureuser azureuser 28 Oct  8 20:00 /home/azureuser/.vscode-server
 drwx------. 2 azureuser azureuser  6 Oct  8 20:00 /opt/azureuser/vscode-server
 ```
 
-The date and the link size follow the VM. Connect again as `azureuser`. New server files are written on `/opt`. `/opt/tnms-install` stays mode `750`, owner root, group `azureuser`. Put the five install files in `/tmp`, as `docs/customer/install-without-repo.md` describes.
+The date and the link size follow the VM. Connect again as `azureuser`. New server files are written on `/opt`. `/opt/tnms-install` stays mode `750`, owner root, group `azureuser`. Put `Makefile`, `install-tnms-wizard.sh`, `tnms-install.properties.in`, and the three vendor zip files in `/tmp`, as `docs/customer/install-without-repo.md` describes.
 
 ## 7. Next
 
-Continue with `docs/customer/install-without-repo.md`. Before section 1 of that guide, copy `install-tnms-wizard.sh`, `tnms-install.properties.in`, and the three vendor zip files to `/tmp`. **Move the files out of /tmp** in that guide moves them into `/opt/tnms-install` and sets the permissions. The properties file stays beside the script. The unpacked prerequisites and `TNMS.bin` go under `/opt/tnms-install/prereq` and `/opt/tnms-install/installer`.
+Continue with `docs/customer/install-without-repo.md`. Copy `Makefile`, `install-tnms-wizard.sh`, `tnms-install.properties.in`, and the three vendor zip files to `/tmp`. That guide's `make` moves them into `/opt/tnms-install` and sets the permissions. The properties file stays beside the script. The unpacked prerequisites and `TNMS.bin` go under `/opt/tnms-install/prereq` and `/opt/tnms-install/installer`.

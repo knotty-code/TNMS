@@ -1,239 +1,77 @@
 # TNMS 9.1 on RHEL 8 — install without this repository
 
-Run this on a fresh Red Hat Enterprise Linux 8 server, as root, from top to bottom. It is the sequence that installed TNMS 9.1.0.593.0 Server and Mediation with Oracle 19c on 2026-10-08.
-
-Prepare the VM with [pre-install.md](pre-install.md) first. That guide mounts the 1 TB disk on `/opt`. Then run this guide.
+Run this on a fresh Red Hat Enterprise Linux 8 server, as root, after [pre-install.md](pre-install.md). That guide mounts the 1 TB disk on `/opt`. This one installs Oracle 19c and TNMS 9.1.0.593.0 Server and Mediation.
 
 One machine. Small Plus. TNMS Server and Mediation together. New database.
 
-The TNMS client login follows the wizard-file section. The database and SFTP passwords are in the table after that. Write the database passwords into `/root/tnms-db-credentials` (mode 600). A step headed **This host** applies when the fresh server matches the condition in that step.
+The procedure is [scripts/Makefile](../../scripts/Makefile). The server does not need this git repository. Copy the Makefile to the server with the wizard files and run it there.
 
-A line that says **Confirm by running** is a separate command. Run that command. The next **Expected output** block is what that command should print. Compare the two. A work command that prints nothing is finished when the shell prompt returns. Names and addresses below are this host. Sizes move with the disk. Replace `TNMS` and `172.16.0.4` with the site values.
+Names and addresses below are this host. Replace them with the site values by setting the variables in the next section. Sizes move with the disk.
 
 ## Before you start
 
-Copy these five files to `/tmp` on the server before section 1. Do this from the workstation before hostname, packages, Oracle, or TNMS. `/tmp` is the 16 GB filesystem. The Oracle zip is about 5 GB. `/home` is about 1 GB, so leave these files out of `/home`.
+Gather these six files in one directory on the workstation. The three zip files are not in this repository.
 
-- `/tmp/install-tnms-wizard.sh`
-- `/tmp/tnms-install.properties.in`
-- `/tmp/LINUX.X64_193000_db_home_and_patches.zip`
-- `/tmp/TNMS_LUX_R9.1.0.593.0_1904_Prerequisites.zip`
-- `/tmp/TNMS_LUX_R9.1.0.593.0_1904.zip`
+- `Makefile`
+- `install-tnms-wizard.sh`
+- `tnms-install.properties.in`
+- `LINUX.X64_193000_db_home_and_patches.zip`
+- `TNMS_LUX_R9.1.0.593.0_1904_Prerequisites.zip`
+- `TNMS_LUX_R9.1.0.593.0_1904.zip`
 
-From the workstation directory that contains the five files:
+`/tmp` on the server is the 16 GB filesystem. The zip files are about 11 GB together. `/home` is about 1 GB, so leave these files out of `/home`.
 
 ```bash
-scp install-tnms-wizard.sh tnms-install.properties.in \
+scp Makefile install-tnms-wizard.sh tnms-install.properties.in \
   LINUX.X64_193000_db_home_and_patches.zip \
   TNMS_LUX_R9.1.0.593.0_1904_Prerequisites.zip \
   TNMS_LUX_R9.1.0.593.0_1904.zip \
   <user>@<server-ip>:/tmp/
 ```
 
-`<user>` is the SSH account. `<server-ip>` is the server address. The command finishes when all five files have been copied. `Permission denied` or `No such file` means stop and fix the path before continuing.
+`<user>` is the SSH account. `<server-ip>` is the server address. `Permission denied` or `No such file` means stop and fix the path.
 
-**Confirm by running:**
-
-```bash
-ls -1 /tmp/install-tnms-wizard.sh \
-  /tmp/tnms-install.properties.in \
-  /tmp/LINUX.X64_193000_db_home_and_patches.zip \
-  /tmp/TNMS_LUX_R9.1.0.593.0_1904_Prerequisites.zip \
-  /tmp/TNMS_LUX_R9.1.0.593.0_1904.zip
-```
-
-**Expected output:**
-
-```text
-/tmp/install-tnms-wizard.sh
-/tmp/tnms-install.properties.in
-/tmp/LINUX.X64_193000_db_home_and_patches.zip
-/tmp/TNMS_LUX_R9.1.0.593.0_1904_Prerequisites.zip
-/tmp/TNMS_LUX_R9.1.0.593.0_1904.zip
-```
-
-Leave `tnms-install.properties.in` unchanged. Section 1 does not use these files. The next section creates the directories on `/opt`. **Move the files out of /tmp** then copies the five files into those directories and sets the file modes.
-
-## Create the /opt directories
-
-Run this as root after [pre-install.md](pre-install.md) has mounted the 1 TB disk on `/opt`. The commands create the product directories and set their modes. `install -d` on a directory that already exists sets the owner, group, and mode again.
-
-**Confirm by running:**
+On the server, as root:
 
 ```bash
-findmnt -n -o SOURCE,SIZE,TARGET /opt
+dnf -y install make
+make -C /tmp -f Makefile
 ```
 
-**Expected output:**
+`make` reads the file before `stage` removes the `/tmp` copies, then continues from `/opt/tnms-install`. A later run can use `make -C /opt/tnms-install`.
 
-One line. `SOURCE` is `/dev/mapper/datavg-optlv` and `SIZE` is `1023.4G` on this image. Empty output means `/opt` is not a mount. Stop and finish the pre-install guide before creating these directories.
+`make status` only reads the host. It prints `ok` or `MISSING` for each condition and does not install, restart, or write a stamp. Stamps live in `/var/lib/tnms-install/`. A missing stamp does not by itself repeat Oracle or the TNMS wizard. Those two commands run only when the product is absent.
 
-```text
-/dev/mapper/datavg-optlv 1023.4G /opt
-```
+`make help` lists the targets. `make check` is the default goal: it finishes any target that is not done, then runs the checks at the end of this page.
 
-`/opt/oracle` holds the database software. `/opt/nokia` holds the TNMS software. `/opt/tnms-data` is the TNMS data directory. `/opt/oradata` holds `ora1`, `ora2`, and `ora3`. Pre-install bind-mounts `/opt/tnms-data` on `/nokia` and `/opt/oradata` on `/oradata`. `/opt/tnms-install` holds the wizard files. `/opt/tnms-install/resources` holds the three zip files.
+These stay outside `make`:
 
-| Path | Mode | Owner and group |
+- The disk layout in [pre-install.md](pre-install.md). The first recipe stops unless `findmnt` shows `/opt` on `/dev/mapper/datavg-optlv`.
+- The `scp` above. The zip files are not in the repository, so there is no `make push`.
+- The Azure security group for TCP 8444.
+- The first client password change after login.
+- License keys, the Windows client, and the manual GUI path at the bottom of this page.
+
+## Variables
+
+Set these on the `make` command line or in `/root/tnms-install.local.mk`. The defaults are this host.
+
+| Variable | Default | Role |
 | --- | --- | --- |
-| /opt/oracle | 755 | root root |
-| /opt/nokia | 755 | root root |
-| /opt/tnms-data | 755 | root root |
-| /opt/oradata | 755 | root root |
-| /opt/oradata/ora1 | 755 | root root |
-| /opt/oradata/ora2 | 755 | root root |
-| /opt/oradata/ora3 | 755 | root root |
-| /opt/tnms-install | 750 | root azureuser |
-| /opt/tnms-install/resources | 750 | root azureuser |
+| `TNMS_HOSTNAME` | `TNMS` | Short hostname |
+| `TNMS_IP` | detected | Server IPv4. Empty uses the same route lookup as the wizard. |
+| `TNMS_ADMIN_GROUP` | `azureuser` | Group on `/opt/tnms-install`, and the SSH account name in the sftp check |
+| `TNMS_SID` | `TNMS` | Oracle SID |
+| `SYS_PASSWORD` | `TnZT5hgW8Zwsp79` | Oracle `SYS` |
+| `SYSTEM_PASSWORD` | `TnZT5hgW8Zwsp79` | Oracle `SYSTEM`. Same value as `SYS`. |
+| `TNMSDBA_PASSWORD` | `Tnc25xQ36XBUa9` | Database login `tnmsdba` |
+| `TNMS_SFTP_PASSWORD` | `Tsvb5-Xe8ou3wR9` | OS account `tnms_sftp` |
 
-Mode `755` lets the `oracle` and `tnms` users enter those directories when the install creates them. Mode `750` and group `azureuser` let the SSH login open `/opt/tnms-install`. Other accounts cannot. Root remains the owner.
+The hosts line uses `TNMS_IP` and the `search` domain from `/etc/resolv.conf`. The FQDN is first, then the short name.
 
-```bash
-install -d -o root -g root -m 755 \
-  /opt/oracle /opt/nokia /opt/tnms-data
-install -d -o root -g root -m 755 \
-  /opt/oradata/ora1 /opt/oradata/ora2 /opt/oradata/ora3
-install -d -o root -g azureuser -m 750 \
-  /opt/tnms-install /opt/tnms-install/resources
-restorecon -RF \
-  /opt/oracle /opt/nokia /opt/tnms-data /opt/oradata /opt/tnms-install
-```
+Password rule used for `SYS`, `SYSTEM`, and `tnmsdba`: 6 to 30 characters from `a-z`, `A-Z`, `0-9`, and `+ - _ { }`. `tnmsdba` is a different value from `SYS`. The SFTP password is separate again.
 
-`install` prints nothing. `restorecon` prints a line for each directory it relabels, or nothing when the labels are already right.
-
-**Confirm by running:**
-
-```bash
-stat -c '%A %U %G %n' /opt/oracle /opt/nokia /opt/tnms-data \
-  /opt/oradata /opt/oradata/ora1 /opt/oradata/ora2 /opt/oradata/ora3 \
-  /opt/tnms-install /opt/tnms-install/resources
-```
-
-**Expected output:**
-
-```text
-drwxr-xr-x root root /opt/oracle
-drwxr-xr-x root root /opt/nokia
-drwxr-xr-x root root /opt/tnms-data
-drwxr-xr-x root root /opt/oradata
-drwxr-xr-x root root /opt/oradata/ora1
-drwxr-xr-x root root /opt/oradata/ora2
-drwxr-xr-x root root /opt/oradata/ora3
-drwxr-x--- root azureuser /opt/tnms-install
-drwxr-x--- root azureuser /opt/tnms-install/resources
-```
-
-## Move the files out of /tmp
-
-The five files are in `/tmp` from **Before you start**. On this server the Oracle zip is about 4.7 GB, the TNMS zip is about 5.7 GB, and the prerequisites zip is about 86 MB. Together they use about 11 GB of the 16 GB `/tmp`. Move them onto `/opt` before section 1. Unpacking the zips in `/tmp` needs more space than that filesystem has.
-
-Run this as root. The `findmnt` check in the previous section must show `/opt` on `datavg-optlv`.
-
-The wizard script and the properties file go in `/opt/tnms-install`. The three zip files go in `/opt/tnms-install/resources`. `install` copies each file. `rm` removes the `/tmp` copy after that copy.
-
-```bash
-install -d -o root -g azureuser -m 750 /opt/tnms-install /opt/tnms-install/resources
-install -o root -g root /tmp/install-tnms-wizard.sh /opt/tnms-install/install-tnms-wizard.sh
-install -o root -g root /tmp/tnms-install.properties.in /opt/tnms-install/tnms-install.properties.in
-install -o root -g root \
-  /tmp/LINUX.X64_193000_db_home_and_patches.zip \
-  /tmp/TNMS_LUX_R9.1.0.593.0_1904_Prerequisites.zip \
-  /tmp/TNMS_LUX_R9.1.0.593.0_1904.zip \
-  /opt/tnms-install/resources/
-rm -f /tmp/install-tnms-wizard.sh /tmp/tnms-install.properties.in \
-  /tmp/LINUX.X64_193000_db_home_and_patches.zip \
-  /tmp/TNMS_LUX_R9.1.0.593.0_1904_Prerequisites.zip \
-  /tmp/TNMS_LUX_R9.1.0.593.0_1904.zip
-```
-
-`install` prints nothing. `rm` prints nothing.
-
-Owner stays root. Group is `azureuser`, the SSH login.
-
-`/opt/tnms-install` and `/opt/tnms-install/resources` are mode `750`. Root can change them. `azureuser` can open them.
-
-`install-tnms-wizard.sh` is mode `740`. Root runs it in step 9. `azureuser` can read it.
-
-`tnms-install.properties.in` and the three zip files are mode `640`. `azureuser` can open the properties file. Saving that file is refused. The plaintext passwords stay in `/root` at mode `600`.
-
-```bash
-chgrp azureuser \
-  /opt/tnms-install \
-  /opt/tnms-install/resources \
-  /opt/tnms-install/install-tnms-wizard.sh \
-  /opt/tnms-install/tnms-install.properties.in \
-  /opt/tnms-install/resources/LINUX.X64_193000_db_home_and_patches.zip \
-  /opt/tnms-install/resources/TNMS_LUX_R9.1.0.593.0_1904_Prerequisites.zip \
-  /opt/tnms-install/resources/TNMS_LUX_R9.1.0.593.0_1904.zip
-chmod 750 /opt/tnms-install /opt/tnms-install/resources
-chmod 740 /opt/tnms-install/install-tnms-wizard.sh
-chmod 640 /opt/tnms-install/tnms-install.properties.in \
-  /opt/tnms-install/resources/LINUX.X64_193000_db_home_and_patches.zip \
-  /opt/tnms-install/resources/TNMS_LUX_R9.1.0.593.0_1904_Prerequisites.zip \
-  /opt/tnms-install/resources/TNMS_LUX_R9.1.0.593.0_1904.zip
-```
-
-`chgrp` and `chmod` print nothing.
-
-**Confirm by running:**
-
-```bash
-ls -l /opt/tnms-install
-```
-
-**Expected output:**
-
-Both wizard names are listed, plus the `resources` directory. The modes are the check. Sizes and dates follow the files. On RHEL the mode column ends with a dot.
-
-```text
--rwxr-----. 1 root azureuser <size> <date> install-tnms-wizard.sh
-drwxr-x---. 2 root azureuser <size> <date> resources
--rw-r-----. 1 root azureuser <size> <date> tnms-install.properties.in
-```
-
-**Confirm by running:**
-
-```bash
-ls -l /opt/tnms-install/resources
-```
-
-**Expected output:**
-
-Three zip files, each mode `640`, owner root, group `azureuser`.
-
-```text
--rw-r-----. 1 root azureuser <size> <date> LINUX.X64_193000_db_home_and_patches.zip
--rw-r-----. 1 root azureuser <size> <date> TNMS_LUX_R9.1.0.593.0_1904.zip
--rw-r-----. 1 root azureuser <size> <date> TNMS_LUX_R9.1.0.593.0_1904_Prerequisites.zip
-```
-
-**Confirm by running:**
-
-```bash
-grep -c '@TNMS_IP@' /opt/tnms-install/tnms-install.properties.in
-```
-
-**Expected output:**
-
-```text
-7
-```
-
-`7` is the seven address fields the script fills in. `0` means this is the wrong file, or the file was edited. Replace it with the delivered `tnms-install.properties.in` and run this section again.
-
-## Where the install files go
-
-> The directories were created in **Create the /opt directories**. **Move the files out of /tmp** copies the five files to the paths in this table and sets the file modes. The script reads the properties file from `/opt/tnms-install`. One file without the other stops the script.
-
-| Wizard file | Path on the server |
-| --- | --- |
-| install-tnms-wizard.sh | /opt/tnms-install/install-tnms-wizard.sh |
-| tnms-install.properties.in | /opt/tnms-install/tnms-install.properties.in |
-| Three vendor zip files | /opt/tnms-install/resources/ |
-
-`/opt` is the 1 TB volume from the pre-install guide. `/opt/oracle`, `/opt/nokia`, and `/opt/tnms-install` are directories on that volume. **Move the files out of /tmp** runs only after `findmnt` shows `/opt` on `datavg-optlv`.
-
-Keep both wizard file names. Leave `tnms-install.properties.in` as delivered. That file sets `USER_INSTALL_DIR`, `USER_INSTALL_DIR_TMP`, `USER_DATA_DIR`, `ORACLE_INSTALL_DIR`, and `ORACLE_DATA_DIR`. The script writes the server IPv4 into a separate response file, `/root/tnms-install.properties`. Database passwords stay in `/root/tnms-db-credentials` from step 6. Leave those passwords out of the properties file. Leave both wizard files out of the `TNMS.bin` directory. Run the script in step 9.
+`make` writes the database passwords into `/root/tnms-db-credentials` at mode 600. If that file already exists and a password differs, `make` stops and leaves the file in place. Leave `tnms-install.properties.in` unchanged. The wizard writes the server IPv4 into a separate response file, `/root/tnms-install.properties`.
 
 ## TNMS client login
 
@@ -246,13 +84,11 @@ Use this login in the browser and in the TNMS client.
 | Address | `https://<server-ip>:8444/tnms-webclient` |
 | Port | TCP `8444` |
 
-> The first login asks for a new password. Use at least 8 characters, with two letters and one number, and change at least 3 characters from `e2e!Net4u#`. Keep the username out of the new password, and keep any run of letters or digits to 3.
+The first login asks for a new password. Use at least 8 characters, with two letters and one number, and change at least 3 characters from `e2e!Net4u#`. Keep the username out of the new password, and keep any run of letters or digits to 3.
 
-Allow inbound TCP 8444 on the security group in front of the server. The browser warns about the certificate. Continue past that warning. The next table is the database and SFTP passwords. Those values go in `/root/tnms-db-credentials`.
+Allow inbound TCP 8444 on the security group in front of the server. The browser warns about the certificate. Continue past that warning.
 
 ## Values used on this host
-
-Substitute the site address and names. Keep the paths and the SID unless the site table says otherwise.
 
 | Item | This host |
 | --- | --- |
@@ -269,1286 +105,145 @@ Substitute the site address and names. Keep the paths and the SID unless the sit
 | SFTP user | `tnms_sftp` |
 | Database OS user | `oracle`, groups `oinstall` and `dba` |
 | Database login user | `tnmsdba` |
-| `SYS` password | `TnZT5hgW8Zwsp79` |
-| `SYSTEM` password | `TnZT5hgW8Zwsp79` |
-| `tnmsdba` password | `Tnc25xQ36XBUa9` |
-| `tnms_sftp` password | `Tsvb5-Xe8ou3wR9` |
 | Large disk | `/opt` on `datavg/optlv`, the 1 TB volume |
 | Install files | `/opt/tnms-install` |
 | Media directory | `/opt/tnms-install/resources` |
 
-Password rule used for `SYS`, `SYSTEM`, and `tnmsdba`: 6 to 30 characters from `a-z`, `A-Z`, `0-9`, and `+ - _ { }`. `SYS` and `SYSTEM` are the same value. `tnmsdba` is a different value. The SFTP password is separate again.
+## Targets
 
-## Confirm the install files
+`make` runs the targets below in order. Each one checks the result before it writes its stamp. Run one target with `make -C /opt/tnms-install <target>` after the Makefile is on `/opt`.
 
-**Move the files out of /tmp** already copied the five files onto `/opt` and removed the `/tmp` copies. Run the checks here before section 1. A name that is still only under `/tmp` means go back to **Move the files out of /tmp**.
+### stage
 
-### Confirm the layout
+Creates `/opt/oracle`, `/opt/nokia`, `/opt/tnms-data`, `/opt/oradata/ora1`, `/opt/oradata/ora2`, and `/opt/oradata/ora3` at mode 755, root:root. Creates `/opt/tnms-install` and `/opt/tnms-install/resources` at mode 750, root:`TNMS_ADMIN_GROUP`. Copies the wizard to mode 740 and the properties file and zip files to mode 640. `grep -c @TNMS_IP@` must print 7. The properties file must still set `USER_INSTALL_DIR`, `USER_INSTALL_DIR_TMP`, `USER_DATA_DIR`, `ORACLE_INSTALL_DIR`, and `ORACLE_DATA_DIR`.
 
-**Confirm by running:**
+`restorecon` runs on those `/opt` directories. It does not run on the `/nokia` or `/oradata` bind mounts.
 
-```bash
-ls -l /opt/tnms-install
-```
+Skips the copy when that layout already matches. Mode 751 on `/opt/tnms-install` still counts as a match: `oracle` adds `o+x` so the `oracle` user can read `TNMS.rsp`. A later `stage` leaves that bit in place once `/etc/oratab` contains the SID. Putting the directory back to 750 makes `installation.sh` stop with `[INS-10101]`.
 
-**Expected output:**
+### host
 
-Both wizard names are listed, plus the `resources` directory. The modes are the check. Sizes and dates follow the files. On RHEL the mode column ends with a dot.
+Sets the short hostname, `preserve_hostname: true`, `LANG=en_US.UTF-8`, and the address line in `/etc/hosts`. Confirms `hostname --fqdn`, `getent -s files hosts`, and that `nisdomainname` is unset. `getent hosts` without `-s files` returns the IPv6 link-local address. That result is not the check.
 
-```text
--rwxr-----. 1 root azureuser <size> <date> install-tnms-wizard.sh
-drwxr-x---. 2 root azureuser <size> <date> resources
--rw-r-----. 1 root azureuser <size> <date> tnms-install.properties.in
-```
+Skips when those values already match. If `/etc/hosts` already names the short hostname with a different address or order, `host` stops and does not append a second line.
 
-**Confirm by running:**
+### packages
 
-```bash
-ls -l /opt/tnms-install/resources
-```
+Installs EPEL and the package set Oracle and TNMS check: `attr`, `bc`, `elfutils-libelf-devel`, `fontconfig-devel`, `gcc`, `gcc-c++`, `jemalloc`, `ksh`, `libaio`, `libaio-devel`, `libnsl`, `libXtst`, `libzip`, `make`, `psmisc`, `sysstat`, `unzip`, `perl`, `binutils`, and `glibc-devel`.
 
-**Expected output:**
+Skips when `rpm -q` already finds all of them.
 
-Three zip files, each mode `640`, owner root, group `azureuser`.
+### kernel
 
-```text
--rw-r-----. 1 root azureuser <size> <date> LINUX.X64_193000_db_home_and_patches.zip
--rw-r-----. 1 root azureuser <size> <date> TNMS_LUX_R9.1.0.593.0_1904.zip
--rw-r-----. 1 root azureuser <size> <date> TNMS_LUX_R9.1.0.593.0_1904_Prerequisites.zip
-```
+Writes `/etc/sysctl.d/99-tnms.conf` with `vm.swappiness = 1`, `vm.dirty_ratio = 15`, `vm.dirty_background_ratio = 3`, and `vm.min_free_kbytes = 1048576`, then runs `sysctl --system`. Stops and disables firewalld. `chronyd` must already be active. This target does not start it and does not change its NTP pool.
 
-**Confirm by running:**
+Skips when the sysctl file, the live values, firewalld, and chronyd already match.
 
-```bash
-grep -c '@TNMS_IP@' /opt/tnms-install/tnms-install.properties.in
-```
+### disk
 
-**Expected output:**
+Read-only. Confirms `/opt` is `datavg-optlv`, `/tmp` is not `noexec` and is at least 16 GB, swap is the 18 GB file `/opt/swapfile`, and `/nokia` and `/oradata` are the binds from `/opt/tnms-data` and `/opt/oradata`.
 
-```text
-7
-```
+Before `/opt/nokia/tnms/server` exists, `/` must have about 4531 MB free. `TNMS.bin` measures free space on `/` and stops when it is short. After the product directory exists, that free-space gate is skipped because the copy has already used the space.
 
-`7` is the seven address fields the script fills in. `0` means this is the wrong file, or the file was edited. Replace it with the delivered `tnms-install.properties.in` and run the move again.
+### unpack
 
-**Confirm by running:**
+Runs `unzip -t` on the three zip files and stops unless the test prints `No errors detected`. Unpacks Oracle under `/opt/oracle/oramedia`, the prerequisites under `/opt/tnms-install/prereq`, and TNMS under `/opt/tnms-install/installer`. Sets `TNMS.bin` to mode 744 and the Oracle shell scripts executable.
 
-```bash
-grep -E '^(USER_INSTALL_DIR|USER_INSTALL_DIR_TMP|USER_DATA_DIR|ORACLE_INSTALL_DIR|ORACLE_DATA_DIR)=' \
-  /opt/tnms-install/tnms-install.properties.in
-```
+Skips when `TNMS.bin` is mode 744, `installation.sh` is executable, and the four Oracle zip names are present in `/opt/oracle/oramedia`.
 
-**Expected output:**
+The shorter Oracle zip of about 3.7 GB, with no end-of-archive record, is incomplete. `TNMS_WIN_R9.1.0.593.0_1904.zip` is the Windows client and is not part of this server install. `PUs/` in the Linux package was empty on this host, so no PDT zip was copied. The RHEL 9 script `verify_prerequisites_tnms.sh` is not run.
 
-```text
-USER_INSTALL_DIR=/opt/nokia/tnms
-USER_INSTALL_DIR_TMP=/opt/nokia/tnms
-USER_DATA_DIR=/nokia/tnms
-ORACLE_INSTALL_DIR=/opt/oracle
-ORACLE_DATA_DIR=/oradata
-```
+### credentials
 
-A missing line leaves that installer variable empty. `TNMS.bin` then stops with `Invalid install directory!`. The installer action that fills these paths runs only when `INSTALLER_UI` is not `SILENT`. This response file is silent, so the paths are in the file. On Linux the folder check reads `USER_INSTALL_DIR_TMP`. Run `/opt/tnms-install/install-tnms-wizard.sh` in step 9.
+Creates `/root/tnms-db-credentials` at mode 600 with `SYS_PASSWORD`, `SYSTEM_PASSWORD`, and `TNMSDBA_PASSWORD`. The SFTP password is added later by `sftp`.
 
-## 1. Hostname, hosts, locale
+Skips the write when the three values already match. A different value stops the target.
 
-```bash
-hostnamectl set-hostname TNMS
-sed -i 's/^preserve_hostname:.*/preserve_hostname: true/' /etc/cloud/cloud.cfg
-```
+### oracle
 
-`hostnamectl` prints nothing. `sed` prints nothing.
+Gives other users execute permission on `/opt/tnms-install`, then runs `installation.sh` in silent Small Plus mode. On a 16 GB server the log includes `Error checking requirements.` because the memory check wants 32 GB. With `-silent_mode=Y` the script continues. Success is exit 0 and `Final status of the execution: Success` in the newest log under `/home/oracle/ossnms_installation_log/`. The run on this host took about 23 minutes.
 
-The Azure image ships `preserve_hostname: false`. Cloud-init would set the hostname back to the VM name `TNMSv3` on the next boot. `preserve_hostname: true` keeps `TNMS`.
+The listener name is `LISNER` on port 1521. `/etc/oratab` should contain `TNMS:/opt/oracle/product/19c/dbhome_1:Y`.
 
-**Confirm by running:**
+Skips `installation.sh` when that oratab line and the success log are already present. A SID that is present without the success log stops the target. A second `installation.sh` would be a new database install. `patch.sh` stays unrun. The later patch zips are not in this media.
 
-```bash
-grep '^preserve_hostname:' /etc/cloud/cloud.cfg
-```
+If user `oracle` does not exist yet, the read test of `TNMS.rsp` is skipped. `installation.sh` creates that user. The directory is already `o+x`, which is what avoids `[INS-10101]`.
 
-**Expected output:**
+### wizard
 
-```text
-preserve_hostname: true
-```
+Runs `/opt/tnms-install/install-tnms-wizard.sh`. The script fills the server IPv4 into `/root/tnms-install.properties`, installs a temporary `lsmem` wrapper when the host has less than 32 GB, and removes the wrapper before it exits. Small Plus refuses to continue until `lsmem --summary` reports at least 32G. Do not edit `/usr/bin/lsmem` by hand.
 
-**Confirm by running:**
-
-```bash
-hostnamectl status
-```
-
-**Expected output:**
-
-The output includes this line:
-
-```text
-   Static hostname: TNMS
-```
-
-```bash
-localectl set-locale LANG=en_US.UTF-8
-```
-
-That command prints nothing.
-
-**Confirm by running:**
-
-```bash
-locale
-```
-
-**Expected output:**
-
-The output includes this line:
-
-```text
-LANG=en_US.UTF-8
-```
-
-`/etc/hosts` needs the server address, the FQDN, and the short name. Append the address line. `DOMAIN` is the `search` value in `/etc/resolv.conf`. On this VM that value is `m4zuuapewrhure0hzyoxrznrnc.gx.internal.cloudapp.net`. The FQDN from the earlier server, `TNMS.vmefr40i5gquree1lezspcyb0c.gx.internal.cloudapp.net`, belongs to that server.
-
-```bash
-DOMAIN=$(awk '/^search / {print $2; exit}' /etc/resolv.conf)
-grep -qE '[[:space:]]TNMS([[:space:]]|$)' /etc/hosts || printf '%s\n' "172.16.0.4  TNMS.${DOMAIN} TNMS" >> /etc/hosts
-```
-
-The `grep` prints nothing when the line is already present. `printf` prints nothing.
-
-**Confirm by running:**
-
-```bash
-cat /etc/hosts
-```
-
-**Expected output:**
-
-```text
-127.0.0.1   localhost localhost.localdomain localhost4 localhost4.localdomain4
-::1         localhost localhost.localdomain localhost6 localhost6.localdomain6
-172.16.0.4  TNMS.m4zuuapewrhure0hzyoxrznrnc.gx.internal.cloudapp.net TNMS
-```
-
-The name after the address is the FQDN. The short name is last. Reversing those two makes `hostname --fqdn` print `TNMS`.
-
-**Confirm by running:**
-
-```bash
-hostname --fqdn
-```
-
-**Expected output:**
-
-```text
-TNMS.m4zuuapewrhure0hzyoxrznrnc.gx.internal.cloudapp.net
-```
-
-**Confirm by running:**
-
-```bash
-getent -s files hosts TNMS
-```
-
-**Expected output:**
-
-```text
-172.16.0.4      TNMS.m4zuuapewrhure0hzyoxrznrnc.gx.internal.cloudapp.net TNMS
-```
-
-`getent hosts TNMS` returns the IPv6 link-local address. `nss-myhostname` answers the live hostname before `/etc/hosts`. `getent ahosts TNMS` and `getent -s files hosts TNMS` return `172.16.0.4`.
-
-**Confirm by running:**
-
-```bash
-nisdomainname
-```
-
-**Expected output:**
-
-The command exits 1. That exit code is the finished state. The output is:
-
-```text
-nisdomainname: Local domain name not set
-```
-
-**Confirm by running:**
-
-```bash
-getenforce
-```
-
-**Expected output:**
-
-```text
-Enforcing
-```
-
-## 2. Packages
-
-```bash
-dnf -y install https://dl.fedoraproject.org/pub/epel/epel-release-latest-8.noarch.rpm
-```
-
-**Expected output:**
-
-The command ends with:
-
-```text
-Complete!
-```
-
-```bash
-dnf -y install attr bc elfutils-libelf-devel fontconfig-devel gcc gcc-c++ \
-  jemalloc ksh libaio libaio-devel libnsl libXtst libzip make psmisc sysstat \
-  unzip perl binutils glibc-devel
-```
-
-**Expected output:**
-
-The command ends with:
-
-```text
-Complete!
-```
-
-**Confirm by running:**
-
-```bash
-rpm -q epel-release jemalloc elfutils-libelf-devel fontconfig-devel libnsl make sysstat libXtst unzip
-```
-
-**Expected output:**
-
-One line per package, and none of them says `is not installed`. On this host the `jemalloc` line was `jemalloc-5.2.1-3.el8.x86_64`. The Oracle installer checks `elfutils-libelf-devel`, `fontconfig-devel`, `libnsl`, `make`, `sysstat`, and `libXtst`.
-
-## 3. Kernel settings and the firewall
-
-```bash
-cat > /etc/sysctl.d/99-tnms.conf << 'EOF'
-vm.swappiness = 1
-vm.dirty_ratio = 15
-vm.dirty_background_ratio = 3
-vm.min_free_kbytes = 1048576
-EOF
-```
-
-`cat` prints nothing.
-
-```bash
-sysctl --system
-```
-
-**Expected output:**
-
-The output includes the file name and the four settings:
-
-```text
-* Applying /etc/sysctl.d/99-tnms.conf ...
-vm.swappiness = 1
-vm.dirty_ratio = 15
-vm.dirty_background_ratio = 3
-vm.min_free_kbytes = 1048576
-```
-
-```bash
-systemctl stop firewalld
-```
-
-That command prints nothing.
-
-```bash
-systemctl disable firewalld
-```
-
-**Expected output:**
-
-```text
-Removed /etc/systemd/system/multi-user.target.wants/firewalld.service.
-Removed /etc/systemd/system/dbus-org.fedoraproject.FirewallD1.service.
-```
-
-**Confirm by running:**
-
-```bash
-systemctl is-enabled firewalld
-```
-
-**Expected output:**
-
-```text
-disabled
-```
-
-**Confirm by running:**
-
-```bash
-systemctl is-active firewalld
-```
-
-**Expected output:**
-
-```text
-inactive
-```
-
-**Confirm by running:**
-
-```bash
-systemctl is-active chronyd
-```
-
-**Expected output:**
-
-```text
-active
-```
-
-`chronyd` is left as the image installed it (`pool 2.rhel.pool.ntp.org iburst` on this host). Firewalld stays off for the install window.
-
-## 4. Disk space the installers actually check
-
-The pre-install guide mounts the 1 TB disk on `/opt` and creates the directories below. This step confirms that layout. When a check fails, go back to `docs/customer/pre-install.md`. The original server grew `/` and `/tmp` and put the 1 TB disk on `/home`. That record is `docs/customer/install-log.md`.
-
-The Oracle installer and `TNMS.bin` need all of the following:
-
-- `/` has at least 4,531 MB free. The wizard script measures free space on `/`.
-- `/opt` is the 1 TB volume. `TNMS.bin` measures free space on the filesystem that holds `/opt/nokia/tnms`.
-- `/tmp` has at least 16 GB free and is not mounted `noexec`.
-- Swap is 18 GB.
-- `/opt/oracle`, `/opt/nokia`, `/nokia`, and `/oradata` are present. Oracle data uses `/oradata/ora1`, `/oradata/ora2`, and `/oradata/ora3`.
-
-**Confirm by running:**
-
-```bash
-df -h / /tmp /home /opt
-```
-
-**Expected output:**
-
-`/` is about 8G with several GB free. `/tmp` is 16G. `/home` is about 1G. `/opt` is about 1T. Used and available sizes move.
-
-```text
-/dev/mapper/rootvg-rootlv  8.0G  118M  7.9G   2% /
-/dev/mapper/rootvg-tmplv    16G  149M   16G   1% /tmp
-/dev/mapper/rootvg-homelv 1014M   40M  975M   4% /home
-/dev/mapper/datavg-optlv    1.1T   20G  1.1T   2% /opt
-```
-
-**Confirm by running:**
-
-```bash
-findmnt -no OPTIONS /tmp
-```
-
-**Expected output:**
-
-The word `noexec` is absent.
-
-```text
-rw,relatime,seclabel,attr2,inode64,logbufs=8,logbsize=32k,noquota
-```
-
-**Confirm by running:**
-
-```bash
-swapon --show
-```
-
-**Expected output:**
-
-```text
-NAME          TYPE SIZE USED PRIO
-/opt/swapfile file  18G   0B   -2
-```
-
-The `USED` column moves. `SIZE` stays `18G`.
-
-**Confirm by running:**
-
-```bash
-df -h /opt /opt/oracle /opt/nokia /opt/tnms-install /nokia /oradata
-```
-
-**Expected output:**
-
-Every line is `datavg-optlv`. `/opt/oracle`, `/opt/nokia`, and `/opt/tnms-install` are directories on the 1 TB volume. `/nokia` and `/oradata` are bind mounts from that volume.
-
-**Confirm by running:**
-
-```bash
-for p in /opt /nokia /oradata; do findmnt -n -o SOURCE,TARGET "$p"; done
-```
-
-**Expected output:**
-
-`/opt` is `datavg-optlv`. `/nokia` and `/oradata` include the source directory in brackets.
-
-```text
-/dev/mapper/datavg-optlv              /opt
-/dev/mapper/datavg-optlv[/tnms-data]  /nokia
-/dev/mapper/datavg-optlv[/oradata]    /oradata
-```
-
-**Confirm by running:**
-
-```bash
-ls -d /opt/oradata/ora1 /opt/oradata/ora2 /opt/oradata/ora3 /opt/tnms-install/resources
-```
-
-**Expected output:**
-
-```text
-/opt/oradata/ora1
-/opt/oradata/ora2
-/opt/oradata/ora3
-/opt/tnms-install/resources
-```
-
-## Confirm the files before unpacking
-
-**Move the files out of /tmp** already moved the five files and set the modes. Run the checks again before unpacking. A missing name means return to that section. Leave the files where they are.
-
-**Confirm by running:**
-
-```bash
-ls -l /opt/tnms-install /opt/tnms-install/resources
-grep -c '@TNMS_IP@' /opt/tnms-install/tnms-install.properties.in
-df -h /opt/tnms-install /
-```
-
-**Expected output:**
-
-`/opt/tnms-install` lists the script at mode `740`, `resources` at mode `750`, and the properties file at mode `640`. Group is `azureuser`. `resources` lists the three zip files at mode `640`. `grep` prints `7`. `/opt/tnms-install` is the 1 TB volume. `/` is about 8G with several GB free.
-
-## 5. Unpack the media
-
-`MEDIA` is the directory that holds the three zip files.
-
-```bash
-MEDIA=/opt/tnms-install/resources
-```
-
-That assignment prints nothing. The three tests below use it. An `unzip -t` that stops before `No errors detected` is an incomplete zip. Replace that file before continuing.
-
-The Oracle zip is about 5.0 GB. It contains `LINUX.X64_193000_db_home.zip`, `p30869156_190000_Linux-x86-64.zip`, `p30894985_190000_Linux-x86-64.zip`, and `p35775632_190000_Linux-x86-64.zip`. A shorter Oracle zip of about 3.7 GB with no end-of-archive record is incomplete. Leave it unused. `TNMS_WIN_R9.1.0.593.0_1904.zip` is the Windows client. It is not part of this server install. `PUs/` in the Linux package was empty on this host, so no PDT zip was copied.
-
-**Confirm by running:**
-
-```bash
-unzip -t "$MEDIA/LINUX.X64_193000_db_home_and_patches.zip"
-```
-
-**Expected output:**
-
-The last line is:
-
-```text
-No errors detected in compressed data of /opt/tnms-install/resources/LINUX.X64_193000_db_home_and_patches.zip.
-```
-
-**Confirm by running:**
-
-```bash
-unzip -t "$MEDIA/TNMS_LUX_R9.1.0.593.0_1904.zip"
-```
-
-**Expected output:**
-
-The last line is:
-
-```text
-No errors detected in compressed data of /opt/tnms-install/resources/TNMS_LUX_R9.1.0.593.0_1904.zip.
-```
-
-**Confirm by running:**
-
-```bash
-unzip -t "$MEDIA/TNMS_LUX_R9.1.0.593.0_1904_Prerequisites.zip"
-```
-
-**Expected output:**
-
-The last line is:
-
-```text
-No errors detected in compressed data of /opt/tnms-install/resources/TNMS_LUX_R9.1.0.593.0_1904_Prerequisites.zip.
-```
-
-```bash
-mkdir -p /opt/oracle/oramedia /opt/tnms-install/prereq /opt/tnms-install/installer
-unzip -o "$MEDIA/LINUX.X64_193000_db_home_and_patches.zip" -d /opt/oracle/oramedia
-unzip -o "$MEDIA/TNMS_LUX_R9.1.0.593.0_1904_Prerequisites.zip" -d /opt/tnms-install/prereq
-unzip -o "$MEDIA/TNMS_LUX_R9.1.0.593.0_1904.zip" -d /opt/tnms-install/installer
-```
-
-`mkdir` prints nothing. Each `unzip -o` prints one line per file it writes and returns to the prompt when that zip is unpacked.
-
-```bash
-find /opt/tnms-install/prereq/TNMS_Prerequisites/Oracle -type d -exec chmod 755 {} \;
-find /opt/tnms-install/prereq/TNMS_Prerequisites/Oracle -type f -exec chmod 644 {} \;
-find /opt/tnms-install/prereq/TNMS_Prerequisites/Oracle -name '*.sh' -exec chmod 755 {} \;
-chmod 744 /opt/tnms-install/installer/TNMS_Installer/TNMS.bin
-```
-
-Those commands print nothing.
-
-**Confirm by running:**
-
-```bash
-ls /opt/oracle/oramedia
-```
-
-**Expected output:**
-
-```text
-LINUX.X64_193000_db_home.zip
-p30869156_190000_Linux-x86-64.zip
-p30894985_190000_Linux-x86-64.zip
-p35775632_190000_Linux-x86-64.zip
-```
-
-**Confirm by running:**
-
-```bash
-ls -l /opt/tnms-install/installer/TNMS_Installer/TNMS.bin
-```
-
-**Expected output:**
-
-The permission field is `-rwxr--r--` (mode `744`).
-
-**Confirm by running:**
-
-```bash
-ls -l /opt/tnms-install/prereq/TNMS_Prerequisites/Oracle/installation/installation.sh
-```
-
-**Expected output:**
-
-The permission field starts with `-rwx`. The file is executable.
-
-The RHEL 9 script `verify-prerequisites/verify_prerequisites_tnms.sh` does not apply on RHEL 8. It was not run.
-
-## 6. Database passwords
-
-```bash
-install -m 600 /dev/null /root/tnms-db-credentials
-```
-
-`install` prints nothing.
-
-Edit that file so it contains these three lines:
-
-```text
-SYS_PASSWORD=TnZT5hgW8Zwsp79
-SYSTEM_PASSWORD=TnZT5hgW8Zwsp79
-TNMSDBA_PASSWORD=Tnc25xQ36XBUa9
-```
-
-`SYS_PASSWORD` and `SYSTEM_PASSWORD` are what `installation.sh` asks for. `TNMSDBA_PASSWORD` is typed into the TNMS wizard later. The Oracle installer also creates OS user `orabackup` in group `dba`. Leave that account in `dba`.
-
-**Confirm by running:**
-
-```bash
-stat -c '%a %U:%G' /root/tnms-db-credentials
-```
-
-**Expected output:**
-
-```text
-600 root:root
-```
-
-**Confirm by running:**
-
-```bash
-grep -E '^[A-Z_]+=' /root/tnms-db-credentials
-```
-
-**Expected output:**
-
-```text
-SYS_PASSWORD=TnZT5hgW8Zwsp79
-SYSTEM_PASSWORD=TnZT5hgW8Zwsp79
-TNMSDBA_PASSWORD=Tnc25xQ36XBUa9
-```
-
-## 7. Install Oracle 19c
-
-Silent Small Plus. The 32 GB memory check fails on a 16 GB server and the script continues because `-silent_mode=Y` is set. Wait until the log prints `Final status of the execution: Success`. The run on this host took about 23 minutes and exited 0.
-
-`/opt/tnms-install` is mode `750`. `installation.sh` runs `runInstaller` as `oracle`. That account cannot enter the directory, so the installer stops with `[INS-10101] The given response file .../TNMS.rsp is not found.` The real log is `/tmp/InstallActions*/installActions*.log`. Give `oracle` execute permission on the directory before the script. The files inside stay mode `640` and `740`.
-
-```bash
-chmod o+x /opt/tnms-install
-```
-
-That command prints nothing.
-
-**Confirm by running:**
-
-```bash
-sudo -u oracle test -r /opt/tnms-install/prereq/TNMS_Prerequisites/Oracle/installation/TNMS.rsp
-echo $?
-```
-
-**Expected output:**
-
-```text
-0
-```
-
-```bash
-unset http_proxy https_proxy HTTP_PROXY HTTPS_PROXY no_proxy NO_PROXY
-set -a
-. /root/tnms-db-credentials
-set +a
-cd /opt/tnms-install/prereq/TNMS_Prerequisites/Oracle/installation
-./installation.sh \
-  -silent_mode=Y \
-  -configuration_type=SP \
-  -oradata=/oradata \
-  -orainstaller=/opt/oracle/oramedia \
-  -database_name=TNMS \
-  -listener_port=1521 \
-  -syspwd="$SYS_PASSWORD" \
-  -systempwd="$SYSTEM_PASSWORD"
-```
-
-**Expected output:**
-
-While it runs, the terminal prints a long log. On a 16 GB server that log includes these lines, in this order:
-
-```text
-Total memory:    16 GB
-Required memory: 32 GB
-Total swap:    18 GB
-Required swap: 16 GB
-Error checking requirements.
-vm.nr_hugepages: Current:0 New:3463
-Final status of the execution: Success
-```
-
-`Error checking requirements.` is the 32 GB memory check. With `-silent_mode=Y` the script continues. The prompt returns only after `Final status of the execution: Success`. This host reached that line at 02:46 UTC, about 23 minutes after the start. A second run of `installation.sh` is a new database install.
-
-**Confirm by running,** in the same shell, immediately after the prompt returns:
-
-```bash
-echo $?
-```
-
-**Expected output:**
-
-```text
-0
-```
-
-The log file keeps the same lines. Its name includes a timestamp.
-
-**Confirm by running:**
-
-```bash
-grep -F 'Final status of the execution:' /home/oracle/ossnms_installation_log/oracle_installation_*.log
-```
-
-**Expected output:**
-
-```text
-Final status of the execution: Success
-```
-
-If more than one log exists, each matching line is printed. The newest file is the run just finished.
-
-**Confirm by running:**
-
-```bash
-grep -E 'Total memory:|Required memory:|Total swap:|Required swap:|Error checking requirements\.|nr_hugepages' /home/oracle/ossnms_installation_log/oracle_installation_*.log
-```
-
-**Expected output:**
-
-The output includes the memory, swap, and huge-page lines shown above, in that order.
-
-**Confirm by running:**
-
-```bash
-grep TNMS /etc/oratab
-```
-
-**Expected output:**
-
-```text
-TNMS:/opt/oracle/product/19c/dbhome_1:Y
-```
-
-**Confirm by running:**
-
-```bash
-ss -ltn | grep 1521
-```
-
-**Expected output:**
-
-```text
-LISTEN 0      400                0.0.0.0:1521       0.0.0.0:*
-```
-
-**Confirm by running:**
-
-```bash
-grep '^LISNER' /opt/oracle/product/19c/dbhome_1/network/admin/listener.ora
-```
-
-**Expected output:**
-
-```text
-LISNER =
-```
-
-The listener name in `listener.ora` is `LISNER`. Logs are `/home/oracle/ossnms_installation_log/oracle_installation_<timestamp>.log` and a copy under `/tmp`.
-
-The script applies the 19.7 patches that are inside the Oracle zip: `30869156` (Database Release Update 19.7.0.0.200414) and `30894985` (OCW 19.7.0.0.0). It also sets huge pages (`vm.nr_hugepages = 3463` for this 16 GB server).
-
-`patch.sh` in the prerequisites tree asks for later zip files (`p6880880`, `p38629535`, `p38586770`, `p38523609`). Those files are not in this media. Leave `patch.sh` unrun once the line above says Success. A second run of `installation.sh` is a new database install.
-
-## 8. Memory check before the TNMS wizard
-
-Small Plus refuses to continue until `lsmem --summary` reports at least 32G. This host has 16G. Do not edit `/usr/bin/lsmem` by hand. The step 9 script installs that wrapper for the duration of `TNMS.bin` and puts the real command back before it exits. On a server that already reports 32G or more, the script leaves `lsmem` alone.
-
-## 9. Install TNMS Server and Mediation
-
-`TNMS.bin` rejects `-i console` (`Installer User Interface Mode Not Supported`). The recorded run wrote a response file, and that file sets `INSTALLER_UI=silent`. One script replays those choices. There is no second SSH session and no screenshot. To answer the screens yourself from two SSH sessions, use [Manual step 9](#manual-step-9-two-ssh-sessions) at the bottom of this guide instead of the script. Do not do both.
-
-The script is `/opt/tnms-install/install-tnms-wizard.sh`, in the same directory as `tnms-install.properties.in`. Both files were placed in **Move the files out of /tmp**. If either file is missing, stop and complete that section. The script reads `SYS_PASSWORD` and `TNMSDBA_PASSWORD` from `/root/tnms-db-credentials`, writes the server IPv4 into the response file, and runs `TNMS.bin -f /root/tnms-install.properties`. On a host with less than 32 GB it installs the `lsmem` wrapper for that run and removes the wrapper before it exits. It refuses to start when `/opt/nokia/tnms/server` already exists.
-
-Run it as root, in the same SSH session:
-
-```bash
-/opt/tnms-install/install-tnms-wizard.sh
-```
-
-The command prints the address it wrote, then the installer log. The run takes about the same time as the wizard on this host, which was 02:59 to 03:26 UTC.
-
-**Expected output:**
-
-The last lines are:
-
-```text
-TNMS wizard finished. Installer exit <n>. Product files are present, scs_daemon is enabled, and configure scripts exited 0.
-```
-
-On this 19.7 database the line above that is:
-
-```text
-Known SQL error kept: ORA-02065 on _bug33046179_kqr_hot_copy_sleep_limit
-```
-
-`<n>` is the installer exit code. The finished line is the check, including when `<n>` is not 0. On this host `<n>` was 255, and the known SQL error line was printed above the finished line. A line that says `TNMS wizard failed` means stop. Read `/root/tnms-wizard.log`. Do not start the script a second time until that failure is understood.
-
-The script selects the same choices this host used:
-
-| Choice | Value |
-| --- | --- |
-| Package | TNMS Server and Mediation (`Server+NetServer`) |
-| Transport Controller | off. Ports 12443 and 12351 stay unused |
-| Hardware | Small Plus |
-| Users and groups | product defaults: `tnms`, `tnms`, `tnms_sftp`, `oracle`, `dba` |
-| Directories | `/opt/nokia/tnms`, `/nokia/tnms`, `/opt/oracle`, `/oradata`, from the properties file |
-| Database | New. Host `127.0.0.1`, port `1521`, user `tnmsdba`, SID `TNMS`, Oracle home `/opt/oracle/product/19c/dbhome_1` |
-| `sys` password | `SYS_PASSWORD` from step 6 |
-| `tnmsdba` password | `TNMSDBA_PASSWORD` from step 6 |
-| Advisory message | off |
-| Managers | Ethernet, ASON, Optical, Optical Spectrum Insight. ZTC off |
-| Frontend servers | none |
-| Northbound interfaces | none |
-| Network elements | EM-MVM / Generic SNMP only |
-
-| Summary row | Value |
-| --- | --- |
-| Product | TNMS 9.1.0.593.0 |
-| Install directory | `/opt/nokia/tnms` |
-| Data directory | `/nokia/tnms` |
-| Server IP | the site IPv4 (`172.16.0.4` here) |
-| Set | Server and Mediation |
-| Hardware | Small Plus |
-| User / group | `tnms` / `tnms` |
-| SFTP user | `tnms_sftp` |
-| Database | Build, Oracle user `oracle` |
-| Managers | Ethernet, ASON, Optical, Optical Spectrum Insight |
-| Network elements | EM-MVM / Generic SNMP |
-
-`/` must have about 4531 MB free before the script starts. The script stops when it does not. Step 4 is what clears that. On this host the first GUI attempt reported 1,959.78 MB free and stopped; after `rootlv` was 8 GB the copy ran.
-
-The script keeps the install when the only SQL error is this statement in `/nokia/tnms/trace/system/install/sql/db_setup_TNMS_*.log`:
+On this 19.7 database the script keeps one known SQL error and still exits 0:
 
 ```text
 alter system set "_bug33046179_kqr_hot_copy_sleep_limit"=0
 ```
 
-Oracle 19.7 returns `ORA-02065: illegal option for ALTER SYSTEM`. The SQL tool continues, and the component creation summary shows each component `OK`. The configure log `/nokia/tnms/trace/system/install/system_configure.log` ends with `Product configuration ended`, and each after-script exits 0, including `95_scs_service.sh`.
+Oracle returns `ORA-02065: illegal option for ALTER SYSTEM`. The finished line is:
 
-To see the response file without starting the installer:
+```text
+TNMS wizard finished. Installer exit <n>. Product files are present, scs_daemon is enabled, and configure scripts exited 0.
+```
+
+`<n>` may be 255. A line that says `TNMS wizard failed` means stop. Read `/root/tnms-wizard.log`. Do not start the script a second time until that failure is understood.
+
+Skips the script when `/opt/nokia/tnms/server` already exists. The script refuses that second install itself. The target then checks that `scs_daemon` is enabled and that `/nokia/tnms/trace/system/install/system_configure.log` finished with each configure script exiting 0. The run on this host was 02:59 to 03:26 UTC.
+
+The choices are TNMS Server and Mediation, Small Plus, a new database, users `tnms` / `tnms` / `tnms_sftp` / `oracle`, directories from the properties file, managers Ethernet, ASON, Optical, and Optical Spectrum Insight, and network element EM-MVM / Generic SNMP. Transport Controller, ZTC, frontend servers, and northbound interfaces stay off.
+
+`make wizard` passes `--ip` when `TNMS_IP` is set. Otherwise the script detects the address.
+
+To see the response file without starting `TNMS.bin`:
 
 ```bash
 /opt/tnms-install/install-tnms-wizard.sh --dry-run
 ```
 
-**Expected output:**
+### lsmem
 
-```text
-Response file: /tmp/tnms-install.properties.dry-run
-Server IPv4 written into the response file: 172.16.0.4
-lsmem wrapper would be installed for this run and removed when the script exits.
-TNMS.bin was not started.
-```
+If `/usr/bin/lsmem.real` still exists, moves it back over `/usr/bin/lsmem`. The wizard script does this before it exits. This target is the check that a failed run did not leave the wrapper in place.
 
-The address and the wrapper line follow the server. `TNMS.bin was not started.` is the check that the dry run did not install anything.
+Passes when `/usr/bin/lsmem` is the ELF binary and `lsmem.real` is absent. The summary then shows the real RAM, 16G on this host.
 
-```bash
-. /etc/profile.d/ossnms.sh
-```
+### sftp
 
-The leading dot is required. That command prints nothing.
+Sets the `tnms_sftp` password when `passwd -S` is not already `PS`, appends `TNMS_SFTP_PASSWORD` to `/root/tnms-db-credentials` when the line is absent, sets the shell to `/sbin/nologin`, and sets `/nokia` to mode 755, root:root. `tnms` stays locked.
 
-**Confirm by running,** in the same shell, immediately after the source command:
+Comments the external `sftp-server` subsystem, sets `Subsystem sftp internal-sftp`, and appends `Match User tnms_sftp` with `ChrootDirectory /nokia`, `ForceCommand internal-sftp`, and `PasswordAuthentication yes` inside that block only. The global `PasswordAuthentication no` line stays as the image shipped it. `sshd -t` must pass before the file is replaced. sshd restarts only when the file changed.
 
-```bash
-echo $?
-```
+Skips when the shell, password, credentials line, `/nokia` mode, Match block, and `sshd -T` output already match. An incomplete Match block stops the target and does not append a second one.
 
-**Expected output:**
+In the TNMS client, after a client can log in, set the SFTP path to `/tnms/nedata` with nothing in front of `/tnms` (System Preferences, External Communications, and NE Properties). FTP stays off.
 
-```text
-0
-```
+### sudo
 
-**Confirm by running:**
+Copies `/opt/nokia/tnms/system/install/resources/system/tnms_sudo` to `/etc/sudoers.d/tnms_sudo`, mode 440, root:root. `visudo -cf` must print `parsed OK`. `sudo -l -U tnms` includes the `scs_daemon` commands.
 
-```bash
-getent passwd tnms tnms_sftp
-```
+Skips when that check already passes.
 
-**Expected output:**
+### service
 
-```text
-tnms:x:<uid>:<gid>::/opt/nokia/tnms:/bin/bash
-tnms_sftp:x:<uid>:<gid>::/nokia/tnms/nedata:/bin/bash
-```
+Runs `restorecon -RF /opt/nokia` so `scs_daemon` is `bin_t`. It does not relabel `/opt/oracle` while the database is open, and it does not relabel the `/nokia` or `/oradata` bind mounts. Starts `scs_daemon` when it is inactive. Waits up to 3 minutes for TCP 8444 and for `curl -k` to return `301` to `/tnms-webclient` from openresty.
 
-The numeric ids differ by server. The homes and the `tnms` shell are the check. `tnms_sftp` still has `/bin/bash` here. Step 11 changes that shell to `/sbin/nologin`.
+The service can report `active` about a minute before the port opens. A start that fails with `status=203/EXEC` means the `bin_t` label is missing.
 
-**Confirm by running:**
+## Checks
 
-```bash
-systemctl is-enabled scs_daemon
-```
+`make check` runs these commands after the service is up. The same conditions are part of `make status`.
 
-**Expected output:**
-
-```text
-enabled
-```
-
-**Confirm by running:**
-
-```bash
-test -d /opt/nokia/tnms/server && test -d /nokia/tnms && echo TNMS_FILES_OK
-```
-
-**Expected output:**
-
-```text
-TNMS_FILES_OK
-```
-
-## 10. Put lsmem back
-
-The step 9 script removes its wrapper before it exits. Confirm the real command is back. If `/usr/bin/lsmem.real` still exists, the script stopped before that restore. Run this only in that case:
-
-```bash
-mv -f /usr/bin/lsmem.real /usr/bin/lsmem
-```
-
-That command prints nothing.
-
-**Confirm by running:**
-
-```bash
-lsmem --summary
-```
-
-**Expected output:**
-
-```text
-Memory block size:       128M
-Total online memory:      16G
-Total offline memory:      0B
-```
-
-**Confirm by running:**
-
-```bash
-file /usr/bin/lsmem
-```
-
-**Expected output:**
-
-```text
-/usr/bin/lsmem: ELF 64-bit LSB shared object, x86-64, version 1 (SYSV), dynamically linked, interpreter /lib64/ld-linux-x86-64.so.2, for GNU/Linux 3.2.0, BuildID[sha1]=aa4bf18057211264f0eac86aa499369a1081724f, stripped
-```
-
-## 11. SFTP account
-
-`tnms` stays locked. Set the `tnms_sftp` password to `Tsvb5-Xe8ou3wR9`, store that same value in `/root/tnms-db-credentials`, and restrict the account to SFTP under `/nokia`.
-
-```bash
-/usr/bin/passwd tnms_sftp
-```
-
-**Expected output:**
-
-The command asks for the new password twice. Type `Tsvb5-Xe8ou3wR9` both times. It ends with:
-
-```text
-passwd: all authentication tokens updated successfully.
-```
-
-A root shell with no terminal prompt uses `passwd --stdin`. It prints the same success line.
-
-```bash
-passwd --stdin tnms_sftp << 'EOF'
-Tsvb5-Xe8ou3wR9
-EOF
-```
-
-**Expected output:**
-
-```text
-Changing password for user tnms_sftp.
-passwd: all authentication tokens updated successfully.
-```
-
-Add this line to `/root/tnms-db-credentials`:
-
-```text
-TNMS_SFTP_PASSWORD=Tsvb5-Xe8ou3wR9
-```
-
-```bash
-usermod -s /sbin/nologin tnms_sftp
-chown root:root /nokia
-chmod 755 /nokia
-```
-
-Those commands print nothing.
-
-**Confirm by running:**
-
-```bash
-grep -E '^[A-Z_]+=' /root/tnms-db-credentials
-```
-
-**Expected output:**
-
-```text
-SYS_PASSWORD=TnZT5hgW8Zwsp79
-SYSTEM_PASSWORD=TnZT5hgW8Zwsp79
-TNMSDBA_PASSWORD=Tnc25xQ36XBUa9
-TNMS_SFTP_PASSWORD=Tsvb5-Xe8ou3wR9
-```
-
-**Confirm by running:**
-
-```bash
-passwd -S tnms
-```
-
-**Expected output:**
-
-```text
-tnms LK <date> -1 -1 -1 -1 (Password locked.)
-```
-
-**Confirm by running:**
-
-```bash
-passwd -S tnms_sftp
-```
-
-**Expected output:**
-
-```text
-tnms_sftp PS <date> -1 -1 -1 -1 (Password set, SHA512 crypt.)
-```
-
-**Confirm by running:**
-
-```bash
-getent passwd tnms_sftp
-```
-
-**Expected output:**
-
-```text
-tnms_sftp:x:<uid>:<gid>::/nokia/tnms/nedata:/sbin/nologin
-```
-
-**Confirm by running:**
-
-```bash
-stat -c '%a %U:%G' /nokia
-```
-
-**Expected output:**
-
-```text
-755 root:root
-```
-
-In `/etc/ssh/sshd_config`, comment the external sftp subsystem and add the internal one:
-
-```text
-#Subsystem	sftp	/usr/libexec/openssh/sftp-server
-Subsystem	sftp	internal-sftp
-```
-
-Append this at the end of the file. `PasswordAuthentication yes` is only inside the Match block. The global line stays `PasswordAuthentication no`, which is how this image is shipped. A server whose global line is already `yes` can omit that one Match line.
-
-```text
-Match User tnms_sftp
-    ChrootDirectory /nokia
-    ForceCommand internal-sftp
-    X11Forwarding no
-    AllowTcpForwarding no
-    PasswordAuthentication yes
-```
-
-```bash
-sshd -t
-```
-
-That command prints nothing.
-
-**Confirm by running,** in the same shell:
-
-```bash
-echo $?
-```
-
-**Expected output:**
-
-```text
-0
-```
-
-Restart sshd only after that `0`.
-
-```bash
-systemctl restart sshd
-```
-
-That command prints nothing.
-
-**Confirm by running:**
-
-```bash
-systemctl is-active sshd
-```
-
-**Expected output:**
-
-```text
-active
-```
-
-**Confirm by running:**
-
-```bash
-sshd -T -C user=tnms_sftp,host=127.0.0.1,addr=127.0.0.1 | grep -E 'chrootdirectory|forcecommand|passwordauthentication'
-```
-
-**Expected output:**
-
-```text
-passwordauthentication yes
-forcecommand internal-sftp
-chrootdirectory /nokia
-```
-
-**Confirm by running:**
-
-```bash
-sshd -T -C user=azureuser,host=127.0.0.1,addr=127.0.0.1 | grep -E 'chrootdirectory|passwordauthentication'
-```
-
-**Expected output:**
-
-```text
-passwordauthentication no
-chrootdirectory none
-```
-
-This second command is the administrator account. Its name on this host is `azureuser`. Use the site admin name in that `-C user=` argument. An SFTP login as `tnms_sftp` lists the directory `tnms` and `pwd` prints `/`. An SSH shell login as `tnms_sftp` is refused with `This service allows sftp connections only.`
-
-FTP stays off. `vsftpd` was not enabled.
-
-In the TNMS Client, after a client can log in, set the SFTP path to `/tnms/nedata` with nothing in front of `/tnms` (System Preferences, External Communications, and NE Properties).
-
-## 12. sudo for the tnms user
-
-```bash
-cp -p /opt/nokia/tnms/system/install/resources/system/tnms_sudo /etc/sudoers.d/tnms_sudo
-chown root:root /etc/sudoers.d/tnms_sudo
-chmod 440 /etc/sudoers.d/tnms_sudo
-```
-
-Those commands print nothing.
-
-**Confirm by running:**
-
-```bash
-visudo -cf /etc/sudoers.d/tnms_sudo
-```
-
-**Expected output:**
-
-```text
-/etc/sudoers.d/tnms_sudo: parsed OK
-```
-
-**Confirm by running:**
-
-```bash
-stat -c '%a %U:%G' /etc/sudoers.d/tnms_sudo
-```
-
-**Expected output:**
-
-```text
-440 root:root
-```
-
-**Confirm by running:**
-
-```bash
-sudo -l -U tnms
-```
-
-**Expected output:**
-
-The output includes this line:
-
-```text
-    (root) NOPASSWD: /usr/bin/systemctl * scs_daemon.service, /opt/nokia/tnms/system/services/bin/scs_daemon, /opt/nokia/tnms/system/admin/emsstarterdaemon.sh, /opt/nokia/tnms/system/admin/database.sh
-```
-
-The shipped file is mode 640, group `tnms`. Mode 440 is what this host uses.
-
-## 13. Start the service
-
-The wizard enables `scs_daemon.service` and leaves it stopped. On the original server the first start failed with status 203/EXEC. SELinux denied execute because the files under the `/home` bind mount were labeled `user_home_t`. This VM creates those files on the `/opt` volume. Relabel `/opt/nokia` before the first start. Leave `/opt/oracle` alone while the database is open.
-
-```bash
-restorecon -RF /opt/nokia
-```
-
-The command prints a line for each file it relabels, or nothing when the labels are already right.
-
-**Confirm by running:**
-
-```bash
-ls -Z /opt/nokia/tnms/system/services/bin/scs_daemon
-```
-
-**Expected output:**
-
-```text
-system_u:object_r:bin_t:s0 /opt/nokia/tnms/system/services/bin/scs_daemon
-```
-
-```bash
-systemctl reset-failed scs_daemon.service
-systemctl start scs_daemon
-```
-
-Those commands print nothing. A start that prints `status=203/EXEC` means the `bin_t` label is missing. Run `restorecon -RF /opt/nokia` again, then `systemctl reset-failed scs_daemon.service`, then `systemctl start scs_daemon`.
-
-**Confirm by running,** in the same shell, immediately after `systemctl start`:
-
-```bash
-echo $?
-```
-
-**Expected output:**
-
-```text
-0
-```
-
-**Confirm by running:**
-
-```bash
-systemctl is-active scs_daemon
-```
-
-**Expected output:**
-
-```text
-active
-```
-
-**Confirm by running:**
-
-```bash
-ss -ltn | grep 8444
-```
-
-**Expected output:**
-
-```text
-LISTEN 0      511                0.0.0.0:8444       0.0.0.0:*
-```
-
-Port 8444 was left at the product default. The service takes about a minute to open that port after `is-active` already says `active`. Run the `ss` command again until the line appears.
-
-**Confirm by running:**
-
-```bash
-curl -k -sI https://127.0.0.1:8444 | head -n 8
-```
-
-**Expected output:**
-
-The output includes these lines:
-
-```text
-HTTP/1.1 301 Moved Permanently
-Server: openresty
-Location: https://127.0.0.1:8444/tnms-webclient
-```
-
-When that 301 is present, the client can log in. Use the **TNMS client login** at the start of this document: username `Administrator`, password `e2e!Net4u#`, address `https://<server-ip>:8444/tnms-webclient`.
-
-Startup logs can say `LD_PRELOAD` of `libjemalloc.so` cannot be preloaded. `jemalloc-5.2.1-3.el8` was installed and the processes still started.
-
-## 14. Checks
-
-Each row is one command. Run the command in the Check column. The Expected output column is what that command should show. The same commands, with their full output, are in the steps above.
-
-| Check | Expected output |
+| Check | Expected |
 | --- | --- |
 | `hostname --fqdn` | the site FQDN |
 | `grep TNMS /etc/oratab` | `TNMS:/opt/oracle/product/19c/dbhome_1:Y` |
-| `ss -ltn \| grep 1521` | listener on 1521 |
-| `grep -F 'Final status of the execution:' /home/oracle/ossnms_installation_log/oracle_installation_*.log` | `Final status of the execution: Success` in the newest log. An earlier failed attempt keeps its own line. |
-| `lsmem --summary` | the real RAM, and `/usr/bin/lsmem` is not a script |
+| `ss -ltn` for 1521 | listener on 1521 |
+| newest `oracle_installation_*.log` | `Final status of the execution: Success` |
+| `lsmem --summary` | the real RAM, and `/usr/bin/lsmem` is the ELF binary |
 | `. /etc/profile.d/ossnms.sh` | returns with no error |
 | `passwd -S tnms` | locked |
 | `getent passwd tnms_sftp` | shell `/sbin/nologin` |
 | `sudo -l -U tnms` | the SCS commands |
 | `systemctl is-active scs_daemon` | `active` |
-| `ss -ltn \| grep 8444` | a `LISTEN` line for port 8444 |
+| `ss -ltn` for 8444 | a `LISTEN` line |
 | `curl -k -sI https://127.0.0.1:8444` | 301 to `/tnms-webclient` |
 
 `db_setup.sh` exit 2 with the single `ORA-02065` above is the known result on this 19.7 database. The creation summary is OK and `configure_system.sh` exits 0.
@@ -1557,17 +252,20 @@ Left out of this install: Frontend Server, eDNA, Node Manager, a separate mediat
 
 The first install runs for 90 days on a trial license. License keys after that, and the Windows client, are separate procedures.
 
+
 ## What happened on this host
 
 2026-10-08. RHEL 8.10, kernel `4.18.0-553.134.1.el8_10.x86_64`, 8 vCPU, 16 GB RAM. `installation.sh` finished at 02:46 UTC with Success. The TNMS wizard ran from 02:59 to 03:26 UTC, `configure_system.sh` exited 0, and NGINX answered on 8444 at 03:37 UTC. With the stack up, available memory was a few hundred MB and swap use was about 3.5 GB. No OOM kill was recorded, and `ora_pmon_TNMS` stayed up.
 
 ## Manual step 9: two SSH sessions
 
-> **Use this section only to configure step 9 yourself, remotely, with two SSH sessions.** Step 9 above runs `/opt/tnms-install/install-tnms-wizard.sh` and does not use these commands. Do not run the script and this section on the same server. If `/opt/nokia/tnms/server` already exists, the wizard has already been installed.
+`make` does not run this section. The `wizard` target runs `/opt/tnms-install/install-tnms-wizard.sh`.
+
+> **Use this section only to configure the wizard yourself, remotely, with two SSH sessions.** The `wizard` target runs `/opt/tnms-install/install-tnms-wizard.sh` and does not use these commands. Do not run the script and this section on the same server. If `/opt/nokia/tnms/server` already exists, the wizard has already been installed.
 
 `TNMS.bin` rejects `-i console`. The SSH session has no monitor, so the GUI runs on a virtual screen. You keep two SSH sessions open on the server, and a third window on the workstation that is not logged into the server. The first SSH session runs the installer and sits with no prompt. The second SSH session takes each picture. The workstation window downloads the picture so you can see the page.
 
-On a server where `lsmem --summary` reports less than 32G, install this wrapper before the commands below. The step 9 script is not doing it for you on this path. Remove the wrapper after the first SSH session returns, as shown at the end of this section. On a server that already reports 32G or more, skip the wrapper.
+On a server where `lsmem --summary` reports less than 32G, install this wrapper before the commands below. The `wizard` target is not doing it for you on this path. Remove the wrapper after the first SSH session returns, as shown at the end of this section. On a server that already reports 32G or more, skip the wrapper.
 
 ```bash
 mv /usr/bin/lsmem /usr/bin/lsmem.real
@@ -1775,5 +473,5 @@ mv -f /usr/bin/lsmem.real /usr/bin/lsmem
 
 That command prints nothing. If `/usr/bin/lsmem.real` does not exist, the wrapper was not installed, so skip that command.
 
-Then run the checks in step 9 that start with `. /etc/profile.d/ossnms.sh`. Continue at step 10 to confirm `lsmem` is the real program, then steps 11 through 14.
+Then run the checks that start with `. /etc/profile.d/ossnms.sh`. Continue at `lsmem` to confirm `lsmem` is the real program, then `sftp`, `sudo`, `service`, and `check`.
 
