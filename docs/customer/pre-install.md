@@ -519,4 +519,15 @@ The date and the link size follow the VM. Connect again as `azureuser`. New serv
 
 ## 7. Next
 
-Continue with `docs/customer/install-without-repo.md`. Copy `Makefile`, `install-tnms-wizard.sh`, `tnms-install.properties.in`, and the three vendor zip files to `/tmp`. That guide's `make` moves them into `/opt/tnms-install` and sets the permissions. The properties file stays beside the script. The unpacked prerequisites and `TNMS.bin` go under `/opt/tnms-install/prereq` and `/opt/tnms-install/installer`.
+`make scan` reads the host and asks before it changes a disk. `make prepare` applies sections 2 through 4 of this page. Section 6 stays manual.
+
+Continue with `docs/customer/install-without-repo.md`. Copy `Makefile`, `install-tnms-wizard.sh`, `tnms-install.properties.in`, and the three vendor zip files to `/tmp`. On the server, as root:
+
+```bash
+dnf -y install make
+make -C /tmp -f Makefile scan
+make -C /tmp -f Makefile prepare
+make -C /tmp -f Makefile
+```
+
+That guide's `make` moves the files into `/opt/tnms-install` and sets the permissions. The properties file stays beside the script. The unpacked prerequisites and `TNMS.bin` go under `/opt/tnms-install/prereq` and `/opt/tnms-install/installer`.

@@ -6,8 +6,8 @@ This repository holds the Nokia TNMS 9.1 Linux manual and the procedure for one 
 
 Read these two guides in order.
 
-1. [docs/customer/pre-install.md](docs/customer/pre-install.md). Prepare a new VM. The guide sets the hostname and builds the disk layout. The 1 TB disk is mounted on `/opt`.
-2. [docs/customer/install-without-repo.md](docs/customer/install-without-repo.md). Install Oracle 19c and TNMS on a server that does not have this repository. Copy `scripts/Makefile`, `scripts/install-tnms-wizard.sh`, `scripts/tnms-install.properties.in`, and the three vendor zip files to `/tmp` on that server. As root, install `make` and run `make -C /tmp -f Makefile`.
+1. [docs/customer/pre-install.md](docs/customer/pre-install.md). The disk layout for a new VM. `make prepare` applies sections 2 through 4 after `make scan`. Section 6 (VS Code) stays manual.
+2. [docs/customer/install-without-repo.md](docs/customer/install-without-repo.md). Install Oracle 19c and TNMS on a server that does not have this repository. Copy `scripts/Makefile`, `scripts/install-tnms-wizard.sh`, `scripts/tnms-install.properties.in`, and the three vendor zip files to `/tmp` on that server. As root, install `make`, then run `make scan`, `make prepare`, and `make`.
 
 The Oracle and TNMS zip files are not in this repository.
 

@@ -1,6 +1,7 @@
 # TNMS 9.1 install without this repository.
 # Copy this file to /tmp with the wizard, the properties file, and the three zip files.
 # The shell program is in LIB. Site values are exported into that program.
+# make scan reads the host. make prepare applies the disk layout after CONFIRM=yes.
 
 SHELL := /bin/bash
 .ONESHELL:
@@ -12,19 +13,21 @@ SHELL := /bin/bash
 THIS_MAKEFILE := $(abspath $(firstword $(MAKEFILE_LIST)))
 STAMP := /var/lib/tnms-install
 
+-include /root/tnms-install.answers
 -include /root/tnms-install.local.mk
 
 TNMS_HOSTNAME ?= TNMS
 TNMS_IP ?=
 TNMS_ADMIN_GROUP ?= azureuser
 TNMS_SID ?= TNMS
+TNMS_DATA_DISK ?=
 SYS_PASSWORD ?= TnZT5hgW8Zwsp79
 SYSTEM_PASSWORD ?= TnZT5hgW8Zwsp79
 TNMSDBA_PASSWORD ?= Tnc25xQ36XBUa9
 TNMS_SFTP_PASSWORD ?= Tsvb5-Xe8ou3wR9
 
 export THIS_MAKEFILE STAMP
-export TNMS_HOSTNAME TNMS_IP TNMS_ADMIN_GROUP TNMS_SID
+export TNMS_HOSTNAME TNMS_IP TNMS_ADMIN_GROUP TNMS_SID TNMS_DATA_DISK
 export SYS_PASSWORD SYSTEM_PASSWORD TNMSDBA_PASSWORD TNMS_SFTP_PASSWORD
 
 define LIB
@@ -115,14 +118,9 @@ oracle_log_path() {
 }
 
 preflight_ok() {
-  local bad=0 src rel
+  local bad=0 rel
   if [[ "$$(id -u)" -ne 0 ]]; then
     echo "preflight: run as root" >&2
-    bad=1
-  fi
-  src=$$(findmnt -n -o SOURCE /opt 2>/dev/null || true)
-  if [[ "$$src" != /dev/mapper/datavg-optlv ]]; then
-    echo "preflight: /opt source is '$${src:-empty}'. Expected /dev/mapper/datavg-optlv. Finish pre-install first." >&2
     bad=1
   fi
   if ! getent group "$$TNMS_ADMIN_GROUP" >/dev/null; then
@@ -1037,6 +1035,12 @@ report() {
 status_main() {
   local fail=0 name
   require_root
+  scan_collect
+  scan_report
+  if prepare_ok >/dev/null 2>&1; then
+    echo "prepare: nothing to do"
+  fi
+  report prepare prepare_ok || fail=1
   report preflight preflight_ok || fail=1
   report stage layout_ok || fail=1
   if [[ -f "$$ROOT/Makefile" ]]; then
@@ -1056,7 +1060,7 @@ status_main() {
   report sftp sftp_ok || fail=1
   report sudo sudo_ok || fail=1
   report service service_ok || fail=1
-  for name in stage host packages kernel unpack credentials oracle wizard lsmem sftp sudo service; do
+  for name in prepare stage host packages kernel unpack credentials oracle wizard lsmem sftp sudo service; do
     if [[ -f "$$STAMP/$$name" ]]; then
       printf 'stamp %-12s present\n' "$$name"
     else
@@ -1109,6 +1113,7 @@ check_main() {
 
 self_test() {
   local dir a b
+  fixture_self_test
   dir=$$(mktemp -d)
   printf '%s\n' 'Port 22' 'PasswordAuthentication no' 'Subsystem sftp /usr/libexec/openssh/sftp-server' > "$$dir/sshd"
   edit_sshd_file "$$dir/sshd" "$$dir/out" 
@@ -1130,6 +1135,1376 @@ self_test() {
   echo "self-test: ok"
 }
 
+LS_NAME=()
+LS_TYPE=()
+LS_SIZE=()
+LS_FS=()
+LS_MNT=()
+LS_PK=()
+OS_DISK=
+ANSWERS=/root/tnms-install.answers
+TARGET_ROOT=$$((8 * 1024 * 1024 * 1024))
+TARGET_TMP=$$((16 * 1024 * 1024 * 1024))
+HOME_HUGE=$$((100 * 1024 * 1024 * 1024))
+HOME_SMALL=$$((2 * 1024 * 1024 * 1024))
+MIN_DATA=$$((100 * 1000 * 1000 * 1000))
+GROW_STATE=unknown
+GROW_NEED=0
+ROOT_B=
+TMP_B=
+HOME_LV_B=
+VG_FREE=
+OPT_SRC=
+NOKIA_SRC=
+ORADATA_SRC=
+HOME_SRC=
+HOME_B=
+TMP_OPTS=
+SWAP_SHOW=
+HOST_NOW=
+PRESERVE=
+GLOBAL_N=0
+GLOBAL_IPS=
+ROUTE_IP=
+SSH_USER=
+SSH_GROUP=
+REL=
+SELINUX=
+NCPU=
+RAM_LINE=
+ORACLE_NOTE=
+TNMS_NOTE=
+ANS_DISK=
+ANS_GROW=
+ANS_HOST=
+ANS_GROUP=
+ANS_IP=
+ANS_CONFIRM=
+
+ls_field() {
+  local key=$$1 line=$$2
+  local re='(^|[[:space:]])'"$$key"'="([^"]*)"'
+  if [[ $$line =~ $$re ]]; then
+    printf '%s' "$${BASH_REMATCH[2]}"
+  fi
+}
+
+lsblk_load() {
+  local text=$$1 line
+  LS_NAME=()
+  LS_TYPE=()
+  LS_SIZE=()
+  LS_FS=()
+  LS_MNT=()
+  LS_PK=()
+  while IFS= read -r line; do
+    [[ -z $$line ]] && continue
+    LS_NAME+=("$$(ls_field NAME "$$line")")
+    LS_TYPE+=("$$(ls_field TYPE "$$line")")
+    LS_SIZE+=("$$(ls_field SIZE "$$line")")
+    LS_FS+=("$$(ls_field FSTYPE "$$line")")
+    LS_MNT+=("$$(ls_field MOUNTPOINT "$$line")")
+    LS_PK+=("$$(ls_field PKNAME "$$line")")
+  done <<<"$$text"
+}
+
+ls_index() {
+  local want=$$1 i
+  for i in "$${!LS_NAME[@]}"; do
+    if [[ $${LS_NAME[$$i]} == "$$want" ]]; then
+      printf '%s' "$$i"
+      return 0
+    fi
+  done
+  return 1
+}
+
+ls_under() {
+  local name=$$1 ancestor=$$2 pk="" i="" guard=0
+  while [[ $$guard -lt 10 ]]; do
+    if ! i=$$(ls_index "$$name"); then
+      return 1
+    fi
+    pk=$${LS_PK[$$i]}
+    if [[ -z $$pk || $$pk == "$$name" ]]; then
+      return 1
+    fi
+    if [[ $$pk == "$$ancestor" ]]; then
+      return 0
+    fi
+    name=$$pk
+    guard=$$((guard + 1))
+  done
+  return 1
+}
+
+ls_disk_of_mount() {
+  local mnt=$$1 i="" name="" pk="" guard=0
+  for i in "$${!LS_NAME[@]}"; do
+    if [[ $${LS_MNT[$$i]} == "$$mnt" ]]; then
+      name=$${LS_NAME[$$i]}
+      break
+    fi
+  done
+  [[ -n $$name ]] || return 1
+  while [[ $$guard -lt 10 ]]; do
+    if ! i=$$(ls_index "$$name"); then
+      return 1
+    fi
+    if [[ $${LS_TYPE[$$i]} == disk ]]; then
+      printf '%s' "$$name"
+      return 0
+    fi
+    pk=$${LS_PK[$$i]}
+    [[ -n $$pk && $$pk != "$$name" ]] || return 1
+    name=$$pk
+    guard=$$((guard + 1))
+  done
+  return 1
+}
+
+strip_dev() {
+  local name=$$1
+  if [[ $$name == /dev/* ]]; then
+    printf '%s' "$${name:5}"
+  else
+    printf '%s' "$$name"
+  fi
+}
+
+data_disk_block_reason() {
+  local name="" i="" size="" j=""
+  name=$$(strip_dev "$$1")
+  if ! i=$$(ls_index "$$name"); then
+    echo "is not in the scan"
+    return 0
+  fi
+  if [[ $${LS_TYPE[$$i]} != disk ]]; then
+    echo "is not a whole disk"
+    return 0
+  fi
+  if [[ -n $${OS_DISK:-} && $$name == "$$OS_DISK" ]]; then
+    echo "is the OS disk"
+    return 0
+  fi
+  if [[ -n $${LS_FS[$$i]} ]]; then
+    echo "has a filesystem"
+    return 0
+  fi
+  if [[ -n $${LS_MNT[$$i]} ]]; then
+    echo "has a mount"
+    return 0
+  fi
+  for j in "$${!LS_NAME[@]}"; do
+    if ls_under "$${LS_NAME[$$j]}" "$$name"; then
+      if [[ -n $${LS_MNT[$$j]} ]]; then
+        echo "has a child mount ($${LS_NAME[$$j]})"
+        return 0
+      fi
+      if [[ -n $${LS_FS[$$j]} ]]; then
+        echo "has a child filesystem ($${LS_NAME[$$j]})"
+        return 0
+      fi
+      echo "has a partition ($${LS_NAME[$$j]})"
+      return 0
+    fi
+  done
+  size=$${LS_SIZE[$$i]}
+  if [[ ! $$size =~ ^[0-9]+$$ ]]; then
+    echo "has no size"
+    return 0
+  fi
+  if [[ $$size -lt $$MIN_DATA ]]; then
+    echo "is smaller than 100 GB"
+    return 0
+  fi
+  return 0
+}
+
+disk_is_candidate() {
+  local reason
+  reason=$$(data_disk_block_reason "$$1")
+  [[ -z $$reason ]]
+}
+
+list_candidates() {
+  local i
+  for i in "$${!LS_NAME[@]}"; do
+    if [[ $${LS_TYPE[$$i]} == disk ]] && disk_is_candidate "$${LS_NAME[$$i]}"; then
+      printf '%s\n' "$${LS_NAME[$$i]}"
+    fi
+  done
+}
+
+disk_default() {
+  local c n=0 one=""
+  while IFS= read -r c; do
+    [[ -z $$c ]] && continue
+    n=$$((n + 1))
+    one=$$c
+  done < <(list_candidates)
+  if [[ $$n -eq 1 ]]; then
+    printf '%s' "$$one"
+  fi
+}
+
+use_fixture() {
+  local text=$$1
+  lsblk_load "$$text"
+  OS_DISK=$$(ls_disk_of_mount / || true)
+}
+
+lv_bytes() {
+  local raw
+  raw=$$(lvs --noheadings --nosuffix --units b -o lv_size "$$1" 2>/dev/null | awk '{ print $$1 }') || return 1
+  [[ $$raw =~ ^[0-9]+$$ ]] || return 1
+  printf '%s\n' "$$raw"
+}
+
+vg_free_bytes() {
+  local raw
+  raw=$$(vgs --noheadings --nosuffix --units b -o vg_free rootvg 2>/dev/null | awk '{ print $$1 }') || return 1
+  [[ $$raw =~ ^[0-9]+$$ ]] || return 1
+  printf '%s\n' "$$raw"
+}
+
+show_bytes() {
+  local b=$${1:-}
+  if [[ ! $$b =~ ^[0-9]+$$ ]]; then
+    printf 'unknown'
+    return 0
+  fi
+  awk -v b="$$b" 'BEGIN { printf "%s bytes (%.2f GiB)", b, b/1024/1024/1024 }'
+}
+
+home_is_huge() {
+  local b=$$1
+  [[ $$b =~ ^[0-9]+$$ ]] || return 1
+  [[ $$b -ge $$HOME_HUGE ]]
+}
+
+swap_is_ready() {
+  swapon --show=NAME,SIZE --bytes --noheadings 2>/dev/null | awk -v n="/opt/swapfile" -v s="$$SWAP_BYTES" '
+    $$1 == n && $$2 == s { found = 1 }
+    END { exit !found }
+  '
+}
+
+context_has() {
+  local path=$$1 type=$$2 ctx
+  ctx=$$(stat -c %C "$$path" 2>/dev/null || true)
+  [[ $$ctx == *"$$type"* ]]
+}
+
+labels_ok() {
+  context_has /opt usr_t || return 1
+  context_has /opt/tnms-data usr_t || return 1
+  context_has /opt/oradata usr_t || return 1
+  context_has /opt/swapfile swapfile_t || return 1
+}
+
+fstab_has() {
+  local kind=$$1 uuid=$$2 file=$${3:-/etc/fstab}
+  [[ -f $$file ]] || return 1
+  awk -v kind="$$kind" -v uuid="$$uuid" -v h="$$(printf '\043')" '
+    $$1 ~ ("^" h) { next }
+    kind == "opt" && $$2 == "/opt" && (tolower($$1) == tolower("UUID=" uuid) || $$1 == "/dev/datavg/optlv" || $$1 == "/dev/mapper/datavg-optlv") { found = 1 }
+    kind == "nokia" && $$1 == "/opt/tnms-data" && $$2 == "/nokia" { found = 1 }
+    kind == "oradata" && $$1 == "/opt/oradata" && $$2 == "/oradata" { found = 1 }
+    kind == "swap" && $$1 == "/opt/swapfile" { found = 1 }
+    END { exit !found }
+  ' "$$file"
+}
+
+fstab_target_exists() {
+  local target=$$1 file=$${2:-/etc/fstab}
+  [[ -f $$file ]] || return 1
+  awk -v t="$$target" -v h="$$(printf '\043')" '
+    $$1 ~ ("^" h) { next }
+    $$2 == t { found = 1 }
+    END { exit !found }
+  ' "$$file"
+}
+
+fstab_source_exists() {
+  local source=$$1 file=$${2:-/etc/fstab}
+  [[ -f $$file ]] || return 1
+  awk -v s="$$source" -v h="$$(printf '\043')" '
+    $$1 ~ ("^" h) { next }
+    $$1 == s { found = 1 }
+    END { exit !found }
+  ' "$$file"
+}
+
+valid_hostname() {
+  [[ $$1 =~ ^[A-Za-z0-9]([A-Za-z0-9-]{0,61}[A-Za-z0-9])?$$ ]]
+}
+
+valid_group_name() {
+  [[ $$1 =~ ^[a-zA-Z_][a-zA-Z0-9_-]*$$ ]]
+}
+
+valid_ipv4() {
+  local ip=$$1 o
+  [[ $$ip =~ ^([0-9]+)\.([0-9]+)\.([0-9]+)\.([0-9]+)$$ ]] || return 1
+  for o in "$${BASH_REMATCH[@]:1:4}"; do
+    [[ $$o -le 255 ]] || return 1
+    if [[ $$o == 0* && $$o != 0 ]]; then
+      return 1
+    fi
+  done
+  return 0
+}
+
+answers_lines() {
+  local disk=$${1:-} grow=$${2:-} host=$${3:-} group=$${4:-} ip=$${5:-}
+  if [[ -n $$disk ]]; then
+    disk=$$(strip_dev "$$disk")
+    printf 'TNMS_DATA_DISK=/dev/%s\n' "$$disk"
+  fi
+  if [[ $$grow == yes ]]; then
+    printf 'TNMS_GROW=yes\n'
+  fi
+  printf 'TNMS_HOSTNAME=%s\n' "$$host"
+  printf 'TNMS_ADMIN_GROUP=%s\n' "$$group"
+  if [[ -n $$ip ]]; then
+    printf 'TNMS_IP=%s\n' "$$ip"
+  fi
+  printf 'CONFIRM=yes\n'
+}
+
+load_answers() {
+  local file=$$1 line key val
+  ANS_DISK=
+  ANS_GROW=
+  ANS_HOST=
+  ANS_GROUP=
+  ANS_IP=
+  ANS_CONFIRM=
+  [[ -f $$file ]] || return 1
+  while IFS= read -r line || [[ -n $$line ]]; do
+    [[ -z $$line ]] && continue
+    if [[ ! $$line =~ ^([A-Z0-9_]+)=(.*)$$ ]]; then
+      continue
+    fi
+    key=$${BASH_REMATCH[1]}
+    val=$${BASH_REMATCH[2]}
+    case $$key in
+      TNMS_DATA_DISK)
+        [[ $$val =~ ^/dev/[A-Za-z0-9._-]+$$ ]] && ANS_DISK=$$val
+        ;;
+      TNMS_GROW)
+        [[ $$val == yes ]] && ANS_GROW=yes
+        ;;
+      TNMS_HOSTNAME)
+        valid_hostname "$$val" && ANS_HOST=$$val
+        ;;
+      TNMS_ADMIN_GROUP)
+        valid_group_name "$$val" && ANS_GROUP=$$val
+        ;;
+      TNMS_IP)
+        valid_ipv4 "$$val" && ANS_IP=$$val
+        ;;
+      CONFIRM)
+        [[ $$val == yes ]] && ANS_CONFIRM=yes
+        ;;
+    esac
+  done < "$$file"
+}
+
+commit_answers() {
+  local reply=$$1 dest=$$2
+  shift 2
+  if [[ $$reply != yes ]]; then
+    echo "scan: answers were not written."
+    return 0
+  fi
+  local dir tmp
+  dir=$$(dirname "$$dest")
+  tmp=$$(mktemp "$$dir/tnms-install.answers.XXXXXX")
+  answers_lines "$$@" > "$$tmp"
+  chmod 600 "$$tmp"
+  mv -f "$$tmp" "$$dest"
+  echo "scan: wrote $$dest"
+}
+
+ssh_account() {
+  local d owner n=0 only=""
+  if [[ -n $${SUDO_USER:-} && $${SUDO_USER} != root ]]; then
+    printf '%s\n' "$$SUDO_USER"
+    return 0
+  fi
+  for d in /home/*; do
+    [[ -d $$d ]] || continue
+    owner=$$(stat -c %U "$$d" 2>/dev/null || true)
+    [[ -z $$owner || $$owner == root ]] && continue
+    n=$$((n + 1))
+    only=$$owner
+  done
+  if [[ $$n -eq 1 ]]; then
+    printf '%s\n' "$$only"
+    return 0
+  fi
+  return 1
+}
+
+opt_has_names() {
+  [[ -d /opt ]] || return 1
+  find /opt -mindepth 1 -maxdepth 1 -print -quit | grep -q .
+}
+
+mountpoint_busy() {
+  local path=$$1 src
+  [[ -d $$path ]] || return 1
+  src=$$(findmnt -n -o SOURCE "$$path" 2>/dev/null || true)
+  if [[ -n $$src ]]; then
+    return 1
+  fi
+  find "$$path" -mindepth 1 -maxdepth 1 -print -quit | grep -q .
+}
+
+prepare_die() {
+  echo "prepare: $$*" >&2
+  exit 1
+}
+
+scan_die() {
+  echo "scan: $$*" >&2
+  exit 1
+}
+
+home_blocks() {
+  if [[ $${HOME_SRC:-} == *datavg* ]]; then
+    return 0
+  fi
+  if [[ $${HOME_B:-} =~ ^[0-9]+$$ ]] && home_is_huge "$$HOME_B"; then
+    return 0
+  fi
+  return 1
+}
+
+prepare_ok() {
+  local bad=0 src bytes root_b tmp_b home_b opts uuid
+  src=$$(findmnt -n -o SOURCE /opt 2>/dev/null || true)
+  if [[ $$src != /dev/mapper/datavg-optlv ]]; then
+    echo "prepare: /opt source is '$${src:-empty}'" >&2
+    bad=1
+  fi
+  src=$$(findmnt -n -o SOURCE /nokia 2>/dev/null || true)
+  if [[ $$src != *"[/tnms-data]"* ]]; then
+    echo "prepare: /nokia source is '$${src:-empty}'" >&2
+    bad=1
+  fi
+  src=$$(findmnt -n -o SOURCE /oradata 2>/dev/null || true)
+  if [[ $$src != *"[/oradata]"* ]]; then
+    echo "prepare: /oradata source is '$${src:-empty}'" >&2
+    bad=1
+  fi
+  if ! swap_is_ready; then
+    echo "prepare: /opt/swapfile is not an $${SWAP_BYTES}-byte swap" >&2
+    bad=1
+  fi
+  root_b=$$(lv_bytes /dev/rootvg/rootlv || true)
+  tmp_b=$$(lv_bytes /dev/rootvg/tmplv || true)
+  if [[ ! $$root_b =~ ^[0-9]+$$ || $$root_b -lt $$TARGET_ROOT ]]; then
+    echo "prepare: rootlv is '$${root_b:-unknown}', expected at least 8 GiB" >&2
+    bad=1
+  fi
+  if [[ ! $$tmp_b =~ ^[0-9]+$$ || $$tmp_b -lt $$TARGET_TMP ]]; then
+    echo "prepare: tmplv is '$${tmp_b:-unknown}', expected at least 16 GiB" >&2
+    bad=1
+  fi
+  opts=$$(findmnt -no OPTIONS /tmp 2>/dev/null || true)
+  if [[ $$opts == *noexec* ]]; then
+    echo "prepare: /tmp is mounted noexec" >&2
+    bad=1
+  fi
+  src=$$(findmnt -n -o SOURCE /home 2>/dev/null || true)
+  if [[ $$src == *datavg* ]]; then
+    echo "prepare: /home is on $$src" >&2
+    bad=1
+  fi
+  home_b=$$(df -B1 --output=size /home 2>/dev/null | tail -n 1 | tr -d ' ' || true)
+  if [[ $$home_b =~ ^[0-9]+$$ ]] && home_is_huge "$$home_b"; then
+    echo "prepare: /home is $$home_b bytes. A terabyte-scale /home means the data disk was added to homelv." >&2
+    bad=1
+  fi
+  uuid=$$(blkid -s UUID -o value /dev/datavg/optlv 2>/dev/null || true)
+  if ! fstab_has opt "$$uuid"; then
+    echo "prepare: /etc/fstab has no datavg /opt line" >&2
+    bad=1
+  fi
+  if ! fstab_has nokia "$$uuid"; then
+    echo "prepare: /etc/fstab has no /nokia bind" >&2
+    bad=1
+  fi
+  if ! fstab_has oradata "$$uuid"; then
+    echo "prepare: /etc/fstab has no /oradata bind" >&2
+    bad=1
+  fi
+  if ! fstab_has swap "$$uuid"; then
+    echo "prepare: /etc/fstab has no /opt/swapfile line" >&2
+    bad=1
+  fi
+  for path in /opt/oracle /opt/nokia /opt/tnms-data /opt/oradata/ora1 /opt/oradata/ora2 /opt/oradata/ora3 /nokia /oradata /opt/tnms-install /opt/tnms-install/resources; do
+    if [[ ! -d $$path ]]; then
+      echo "prepare: missing $$path" >&2
+      bad=1
+    fi
+  done
+  if ! labels_ok; then
+    echo "prepare: SELinux labels are not usr_t on /opt and swapfile_t on /opt/swapfile" >&2
+    bad=1
+  fi
+  return "$$bad"
+}
+
+print_other_disks() {
+  local i j name any=0 disk_any=0
+  for i in "$${!LS_NAME[@]}"; do
+    [[ $${LS_TYPE[$$i]} == disk ]] || continue
+    [[ $${LS_NAME[$$i]} == "$${OS_DISK:-}" ]] && continue
+    disk_any=1
+    name=$${LS_NAME[$$i]}
+    echo "  $$name $$(show_bytes "$${LS_SIZE[$$i]}")"
+    any=0
+    for j in "$${!LS_NAME[@]}"; do
+      if ls_under "$${LS_NAME[$$j]}" "$$name"; then
+        any=1
+        echo "    $${LS_TYPE[$$j]} $${LS_NAME[$$j]} fs=$${LS_FS[$$j]:-none} mount=$${LS_MNT[$$j]:-none}"
+      fi
+    done
+    if [[ $$any -eq 0 ]]; then
+      echo "    no partitions"
+    fi
+  done
+  if [[ $$disk_any -eq 0 ]]; then
+    echo "  none"
+  fi
+}
+
+print_roms() {
+  local i any=0
+  for i in "$${!LS_NAME[@]}"; do
+    if [[ $${LS_TYPE[$$i]} == rom ]]; then
+      any=1
+      echo "ignored $${LS_NAME[$$i]} type rom"
+    fi
+  done
+  if [[ $$any -eq 0 ]]; then
+    echo "ignored rom: none"
+  fi
+}
+
+print_tmp_files() {
+  local name
+  for name in Makefile "$$WIZARD_NAME" "$$PROPS_NAME" "$${ZIPS[@]}"; do
+    if [[ -f /tmp/$$name ]]; then
+      echo "  present /tmp/$$name"
+    else
+      echo "  absent  /tmp/$$name"
+    fi
+  done
+}
+
+print_actions() {
+  local def=""
+  echo "proposed:"
+  if [[ $$GROW_STATE == done ]]; then
+    echo "  grow: rootlv and tmplv are already at the target size"
+  elif [[ $$GROW_STATE == short ]]; then
+    echo "  grow: not offered. rootvg free $${VG_FREE:-0} bytes, grow needs $${GROW_NEED:-0} bytes"
+  elif [[ $$GROW_STATE == offer ]]; then
+    echo "  grow: extend rootlv to 8 GiB and tmplv to 16 GiB when smaller"
+  else
+    echo "  grow: rootlv, tmplv, or rootvg free space is unknown"
+  fi
+  if [[ $${OPT_SRC:-} == /dev/mapper/datavg-optlv ]]; then
+    echo "  disk: /opt is already datavg-optlv. prepare will not repartition"
+  else
+    def=$$(disk_default || true)
+    if [[ -n $$def ]]; then
+      echo "  disk: default data disk /dev/$$def"
+    else
+      echo "  disk: no single empty data disk. prepare needs TNMS_DATA_DISK"
+    fi
+  fi
+  if home_blocks; then
+    echo "  stop: /home is $${HOME_B:-unknown} bytes on $${HOME_SRC:-unknown}. A terabyte-scale /home means the data disk was added to homelv. prepare will not continue."
+  fi
+  if [[ $${HOME_B:-} =~ ^[0-9]+$$ && $$HOME_B -lt $$HOME_SMALL ]]; then
+    echo "  note: /home is about 1 GB. VS Code Remote SSH stays manual (pre-install section 6)."
+  fi
+  echo "fixed: / at 8 GB, /tmp at 16 GB, swap 18 GB, SID $${TNMS_SID}. Paths /opt /nokia /oradata /opt/oracle /opt/nokia /opt/tnms-data."
+  echo "fixed: passwords stay SYS_PASSWORD, SYSTEM_PASSWORD, TNMSDBA_PASSWORD, and TNMS_SFTP_PASSWORD. scan does not ask for them."
+}
+
+scan_collect() {
+  local ip line
+  REL=$$(cat /etc/redhat-release 2>/dev/null || true)
+  SELINUX=$$(getenforce 2>/dev/null || true)
+  NCPU=$$(nproc 2>/dev/null || true)
+  RAM_LINE=$$(awk '/MemTotal/ { printf "%.0f GB", $$2 / 1024 / 1024 }' /proc/meminfo 2>/dev/null || true)
+  lsblk_load "$$(lsblk -P -b -o NAME,TYPE,SIZE,FSTYPE,MOUNTPOINT,PKNAME 2>/dev/null || true)"
+  OS_DISK=$$(ls_disk_of_mount / || true)
+  ROOT_B=$$(lv_bytes /dev/rootvg/rootlv || true)
+  TMP_B=$$(lv_bytes /dev/rootvg/tmplv || true)
+  HOME_LV_B=$$(lv_bytes /dev/rootvg/homelv || true)
+  VG_FREE=$$(vg_free_bytes || true)
+  TMP_OPTS=$$(findmnt -no OPTIONS /tmp 2>/dev/null || true)
+  OPT_SRC=$$(findmnt -n -o SOURCE /opt 2>/dev/null || true)
+  NOKIA_SRC=$$(findmnt -n -o SOURCE /nokia 2>/dev/null || true)
+  ORADATA_SRC=$$(findmnt -n -o SOURCE /oradata 2>/dev/null || true)
+  HOME_SRC=$$(findmnt -n -o SOURCE /home 2>/dev/null || true)
+  HOME_B=$$(df -B1 --output=size /home 2>/dev/null | tail -n 1 | tr -d ' ' || true)
+  SWAP_SHOW=$$(swapon --show=NAME,SIZE --noheadings 2>/dev/null || true)
+  HOST_NOW=$$(hostnamectl --static 2>/dev/null || true)
+  if [[ -z $$HOST_NOW ]]; then
+    HOST_NOW=$$(hostname 2>/dev/null || true)
+  fi
+  PRESERVE=$$(awk '/^preserve_hostname:/ { print $$2; exit }' /etc/cloud/cloud.cfg 2>/dev/null || true)
+  DOMAIN=$$(resolve_domain || true)
+  ROUTE_IP=$$(ip -4 route get 1.1.1.1 2>/dev/null | awk '{ for (i = 1; i <= NF; i++) if ($$i == "src") { print $$(i + 1); exit } }' || true)
+  GLOBAL_IPS=
+  GLOBAL_N=0
+  while IFS= read -r line; do
+    [[ -z $$line ]] && continue
+    ip=$${line%%/*}
+    if [[ -z $$GLOBAL_IPS ]]; then
+      GLOBAL_IPS=$$ip
+    else
+      GLOBAL_IPS="$$GLOBAL_IPS $$ip"
+    fi
+    GLOBAL_N=$$((GLOBAL_N + 1))
+  done < <(ip -4 -o addr show scope global 2>/dev/null | awk '{ print $$4 }' || true)
+  SSH_USER=$$(ssh_account || true)
+  SSH_GROUP=
+  if [[ -n $$SSH_USER ]]; then
+    SSH_GROUP=$$(id -gn "$$SSH_USER" 2>/dev/null || true)
+  fi
+  if oracle_present; then
+    ORACLE_NOTE="$$TNMS_SID is in /etc/oratab"
+  else
+    ORACLE_NOTE="$$TNMS_SID is not in /etc/oratab"
+  fi
+  if [[ -d /opt/nokia/tnms/server ]]; then
+    TNMS_NOTE="/opt/nokia/tnms/server exists"
+  else
+    TNMS_NOTE="/opt/nokia/tnms/server is absent"
+  fi
+  GROW_NEED=0
+  GROW_STATE=unknown
+  if [[ $$ROOT_B =~ ^[0-9]+$$ && $$TMP_B =~ ^[0-9]+$$ && $$VG_FREE =~ ^[0-9]+$$ ]]; then
+    if [[ $$ROOT_B -lt $$TARGET_ROOT ]]; then
+      GROW_NEED=$$((GROW_NEED + TARGET_ROOT - ROOT_B))
+    fi
+    if [[ $$TMP_B -lt $$TARGET_TMP ]]; then
+      GROW_NEED=$$((GROW_NEED + TARGET_TMP - TMP_B))
+    fi
+    if [[ $$GROW_NEED -eq 0 ]]; then
+      GROW_STATE=done
+    elif [[ $$VG_FREE -lt $$GROW_NEED ]]; then
+      GROW_STATE=short
+    else
+      GROW_STATE=offer
+    fi
+  fi
+}
+
+scan_report() {
+  echo "release: $${REL:-unknown}"
+  echo "selinux: $${SELINUX:-unknown}"
+  echo "cpu: $${NCPU:-unknown}"
+  echo "ram: $${RAM_LINE:-unknown}"
+  echo "os-disk: $${OS_DISK:-unknown}"
+  echo "rootlv: $$(show_bytes "$$ROOT_B")"
+  echo "tmplv: $$(show_bytes "$$TMP_B")"
+  echo "homelv: $$(show_bytes "$$HOME_LV_B")"
+  echo "rootvg-free: $$(show_bytes "$$VG_FREE")"
+  if [[ $${TMP_OPTS:-} == *noexec* ]]; then
+    echo "tmp-noexec: yes"
+  else
+    echo "tmp-noexec: no"
+  fi
+  echo "other-disks:"
+  print_other_disks
+  print_roms
+  echo "opt: $${OPT_SRC:-not-mounted}"
+  echo "nokia: $${NOKIA_SRC:-not-mounted}"
+  echo "oradata: $${ORADATA_SRC:-not-mounted}"
+  echo "home: $${HOME_SRC:-not-mounted} $$(show_bytes "$$HOME_B")"
+  echo "swap: $${SWAP_SHOW:-none}"
+  echo "hostname: $${HOST_NOW:-unknown}"
+  echo "preserve_hostname: $${PRESERVE:-unknown}"
+  echo "search-domain: $${DOMAIN:-unknown}"
+  echo "ipv4-route: $${ROUTE_IP:-none}"
+  echo "ipv4-global: $${GLOBAL_IPS:-none}"
+  echo "ssh-account: $${SSH_USER:-unknown}"
+  echo "ssh-group: $${SSH_GROUP:-unknown}"
+  echo "install-files:"
+  print_tmp_files
+  echo "oracle: $${ORACLE_NOTE:-unknown}"
+  echo "tnms: $${TNMS_NOTE:-unknown}"
+  print_actions
+}
+
+scan_blocked() {
+  if home_blocks; then
+    return 0
+  fi
+  if [[ $${TMP_OPTS:-} == *noexec* ]]; then
+    return 0
+  fi
+  return 1
+}
+
+interactive_scan() {
+  [[ -t 1 && -r /dev/tty && -w /dev/tty ]]
+}
+
+prompt_value() {
+  local label=$$1 default=$${2:-} reply
+  if [[ -n $$default ]]; then
+    printf '%s [%s]: ' "$$label" "$$default" >/dev/tty
+  else
+    printf '%s (no default): ' "$$label" >/dev/tty
+  fi
+  IFS= read -r reply </dev/tty || return 1
+  if [[ -z $$reply ]]; then
+    [[ -n $$default ]] || return 1
+    printf '%s' "$$default"
+  else
+    printf '%s' "$$reply"
+  fi
+}
+
+ip_needs_question() {
+  if [[ $${GLOBAL_N:-0} -eq 1 && -n $${ROUTE_IP:-} && $$GLOBAL_IPS == "$$ROUTE_IP" ]]; then
+    return 1
+  fi
+  return 0
+}
+
+print_proposed_answers() {
+  local disk="" grow="" ip=""
+  if [[ $${OPT_SRC:-} != /dev/mapper/datavg-optlv ]]; then
+    disk=$$(disk_default || true)
+  fi
+  if [[ $$GROW_STATE == offer ]]; then
+    grow=yes
+  fi
+  if ip_needs_question; then
+    if [[ -n $$ROUTE_IP ]]; then
+      ip=$$ROUTE_IP
+    elif [[ $$GLOBAL_N -eq 1 ]]; then
+      ip=$$GLOBAL_IPS
+    fi
+  fi
+  if [[ -z $$disk && $${OPT_SRC:-} != /dev/mapper/datavg-optlv ]]; then
+    echo "Set TNMS_DATA_DISK to one whole disk from the report. There is no default."
+  fi
+  answers_lines "$$disk" "$$grow" "TNMS" "$${SSH_GROUP:-azureuser}" "$$ip"
+}
+
+scan_ask() {
+  local disk="" grow="" host="" group="" ip="" reply="" def="" reason="" tries=0 group_default="" ip_default=""
+  if [[ $${OPT_SRC:-} != /dev/mapper/datavg-optlv ]]; then
+    def=$$(disk_default || true)
+    tries=0
+    while [[ $$tries -lt 20 ]]; do
+      tries=$$((tries + 1))
+      if ! reply=$$(prompt_value "Data disk" "$$def"); then
+        echo "scan: type the data disk device" >/dev/tty
+        def=
+        continue
+      fi
+      reply=$$(strip_dev "$$reply")
+      lsblk_load "$$(lsblk -P -b -o NAME,TYPE,SIZE,FSTYPE,MOUNTPOINT,PKNAME 2>/dev/null || true)"
+      OS_DISK=$$(ls_disk_of_mount / || true)
+      reason=$$(data_disk_block_reason "$$reply")
+      if [[ -z $$reason ]]; then
+        disk=$$reply
+        break
+      fi
+      echo "scan: /dev/$$reply $$reason" >/dev/tty
+      def=
+    done
+    [[ -n $$disk ]] || scan_die "stopped without a data disk"
+  fi
+  if [[ $$GROW_STATE == offer ]]; then
+    reply=$$(prompt_value "Grow rootlv to 8 GiB and tmplv to 16 GiB" "yes") || reply=no
+    if [[ $$reply == yes || $$reply == y || $$reply == YES ]]; then
+      grow=yes
+    fi
+  fi
+  tries=0
+  while [[ $$tries -lt 20 ]]; do
+    tries=$$((tries + 1))
+    reply=$$(prompt_value "Short hostname" "TNMS") || reply=
+    if valid_hostname "$$reply"; then
+      host=$$reply
+      break
+    fi
+    echo "scan: hostname must be a short name" >/dev/tty
+  done
+  [[ -n $$host ]] || scan_die "stopped without a hostname"
+  group_default=$$SSH_GROUP
+  if [[ -z $$group_default ]] || ! getent group "$$group_default" >/dev/null; then
+    group_default=
+  fi
+  tries=0
+  while [[ $$tries -lt 20 ]]; do
+    tries=$$((tries + 1))
+    if ! reply=$$(prompt_value "Admin group" "$$group_default"); then
+      echo "scan: type the admin group" >/dev/tty
+      group_default=
+      continue
+    fi
+    if valid_group_name "$$reply" && getent group "$$reply" >/dev/null; then
+      group=$$reply
+      break
+    fi
+    echo "scan: group $$reply does not exist" >/dev/tty
+    group_default=
+  done
+  [[ -n $$group ]] || scan_die "stopped without an admin group"
+  if ip_needs_question; then
+    ip_default=
+    if [[ -n $$ROUTE_IP ]]; then
+      ip_default=$$ROUTE_IP
+    elif [[ $$GLOBAL_N -eq 1 ]]; then
+      ip_default=$$GLOBAL_IPS
+    fi
+    tries=0
+    while [[ $$tries -lt 20 ]]; do
+      tries=$$((tries + 1))
+      if ! reply=$$(prompt_value "IPv4 address" "$$ip_default"); then
+        echo "scan: type an IPv4 address" >/dev/tty
+        ip_default=
+        continue
+      fi
+      if valid_ipv4 "$$reply"; then
+        ip=$$reply
+        break
+      fi
+      echo "scan: $$reply is not an IPv4 address" >/dev/tty
+      ip_default=
+    done
+    [[ -n $$ip ]] || scan_die "stopped without an IPv4 address"
+  fi
+  echo "scan: answers to write:"
+  answers_lines "$$disk" "$$grow" "$$host" "$$group" "$$ip"
+  printf 'Write these answers to %s? Type yes: ' "$$ANSWERS" >/dev/tty
+  IFS= read -r reply </dev/tty || reply=
+  commit_answers "$$reply" "$$ANSWERS" "$$disk" "$$grow" "$$host" "$$group" "$$ip"
+}
+
+scan_main() {
+  require_root
+  scan_collect
+  scan_report
+  if prepare_ok >/dev/null 2>&1; then
+    echo "prepare: nothing to do"
+    return 0
+  fi
+  if scan_blocked; then
+    echo "scan: prepare will not continue. No answers were written."
+    exit 1
+  fi
+  if interactive_scan; then
+    scan_ask
+    return 0
+  fi
+  echo "scan: no terminal. The report above is read-only."
+  echo "scan: write $$ANSWERS with these lines, then run make prepare."
+  print_proposed_answers
+  exit 2
+}
+
+prepare_load_agreement() {
+  local owner
+  [[ -f $$ANSWERS ]] || prepare_die "missing $$ANSWERS. Run make scan on a terminal, or write that file, then run make prepare."
+  owner=$$(stat -c %U "$$ANSWERS")
+  [[ $$owner == root ]] || prepare_die "$$ANSWERS is owned by $$owner"
+  chmod 600 "$$ANSWERS"
+  load_answers "$$ANSWERS"
+  [[ $$ANS_CONFIRM == yes ]] || prepare_die "$$ANSWERS does not contain CONFIRM=yes"
+  [[ -n $$ANS_HOST ]] || prepare_die "$$ANSWERS does not contain TNMS_HOSTNAME"
+  [[ -n $$ANS_GROUP ]] || prepare_die "$$ANSWERS does not contain TNMS_ADMIN_GROUP"
+  echo "prepare: confirmed answers in $$ANSWERS"
+}
+
+prepare_prechecks() {
+  local home_b opts src
+  preflight_ok || exit 1
+  src=$$(findmnt -n -o SOURCE /home 2>/dev/null || true)
+  if [[ $$src == *datavg* ]]; then
+    prepare_die "/home is on $$src. The data disk was added to the home volume."
+  fi
+  home_b=$$(df -B1 --output=size /home 2>/dev/null | tail -n 1 | tr -d ' ' || true)
+  if [[ $$home_b =~ ^[0-9]+$$ ]] && home_is_huge "$$home_b"; then
+    prepare_die "/home is $$home_b bytes. A terabyte-scale /home means the data disk was added to homelv."
+  fi
+  opts=$$(findmnt -no OPTIONS /tmp 2>/dev/null || true)
+  if [[ $$opts == *noexec* ]]; then
+    prepare_die "/tmp is mounted noexec"
+  fi
+  if mountpoint_busy /nokia; then
+    prepare_die "/nokia is not a bind mount and is not empty"
+  fi
+  if mountpoint_busy /oradata; then
+    prepare_die "/oradata is not a bind mount and is not empty"
+  fi
+}
+
+prepare_grow() {
+  local root_b tmp_b free_b need=0
+  root_b=$$(lv_bytes /dev/rootvg/rootlv || true)
+  tmp_b=$$(lv_bytes /dev/rootvg/tmplv || true)
+  free_b=$$(vg_free_bytes || true)
+  if [[ ! $$root_b =~ ^[0-9]+$$ || ! $$tmp_b =~ ^[0-9]+$$ ]]; then
+    prepare_die "could not read rootlv and tmplv sizes"
+  fi
+  if [[ $$root_b -lt $$TARGET_ROOT ]]; then
+    need=$$((need + TARGET_ROOT - root_b))
+  fi
+  if [[ $$tmp_b -lt $$TARGET_TMP ]]; then
+    need=$$((need + TARGET_TMP - tmp_b))
+  fi
+  if [[ $$need -eq 0 ]]; then
+    echo "prepare: rootlv and tmplv are already at the target size"
+    return 0
+  fi
+  if [[ ! $$free_b =~ ^[0-9]+$$ || $$free_b -lt $$need ]]; then
+    prepare_die "rootvg free $${free_b:-0} bytes, grow needs $$need bytes"
+  fi
+  if [[ $$ANS_GROW != yes ]]; then
+    prepare_die "rootlv or tmplv is below the target and TNMS_GROW is not yes"
+  fi
+  if [[ $$root_b -lt $$TARGET_ROOT ]]; then
+    echo "prepare: lvextend rootlv to 8G"
+    lvextend -r -L 8G /dev/rootvg/rootlv
+  fi
+  if [[ $$tmp_b -lt $$TARGET_TMP ]]; then
+    echo "prepare: lvextend tmplv to 16G"
+    lvextend -r -L 16G /dev/rootvg/tmplv
+  fi
+}
+
+partition_node() {
+  local dev=$$1
+  if [[ -b $${dev}p1 ]]; then
+    printf '%s\n' "$${dev}p1"
+    return 0
+  fi
+  if [[ -b $${dev}1 ]]; then
+    printf '%s\n' "$${dev}1"
+    return 0
+  fi
+  sleep 2
+  udevadm settle || true
+  if [[ -b $${dev}p1 ]]; then
+    printf '%s\n' "$${dev}p1"
+    return 0
+  fi
+  if [[ -b $${dev}1 ]]; then
+    printf '%s\n' "$${dev}1"
+    return 0
+  fi
+  return 1
+}
+
+prepare_mount_opt() {
+  local src dev reason part align os_dev data_dev
+  src=$$(findmnt -n -o SOURCE /opt 2>/dev/null || true)
+  if [[ $$src == /dev/mapper/datavg-optlv ]]; then
+    echo "prepare: /opt is already datavg-optlv"
+    return 0
+  fi
+  if [[ -n $$src ]]; then
+    prepare_die "/opt is mounted from $$src"
+  fi
+  if [[ -e /opt && ! -d /opt ]]; then
+    prepare_die "/opt exists and is not a directory"
+  fi
+  if [[ ! -d /opt ]]; then
+    install -d -m 755 /opt
+  fi
+  if opt_has_names; then
+    prepare_die "/opt is not datavg-optlv and is not empty"
+  fi
+  if [[ -b /dev/datavg/optlv || -b /dev/mapper/datavg-optlv ]]; then
+    echo "prepare: mounting existing /dev/datavg/optlv"
+    mount /dev/datavg/optlv /opt
+    src=$$(findmnt -n -o SOURCE /opt 2>/dev/null || true)
+    [[ $$src == /dev/mapper/datavg-optlv ]] || prepare_die "mount did not attach datavg-optlv"
+    return 0
+  fi
+  [[ -n $$ANS_DISK ]] || prepare_die "TNMS_DATA_DISK is empty"
+  dev=$$ANS_DISK
+  [[ -b $$dev ]] || prepare_die "$$dev is not a block device"
+  lsblk_load "$$(lsblk -P -b -o NAME,TYPE,SIZE,FSTYPE,MOUNTPOINT,PKNAME)"
+  OS_DISK=$$(ls_disk_of_mount / || true)
+  [[ -n $$OS_DISK ]] || prepare_die "could not identify the OS disk. No disk was labeled."
+  reason=$$(data_disk_block_reason "$$dev")
+  [[ -z $$reason ]] || prepare_die "$$dev $$reason"
+  os_dev=$$(readlink -f "/dev/$$OS_DISK")
+  data_dev=$$(readlink -f "$$dev")
+  if [[ -n $$os_dev && $$data_dev == "$$os_dev" ]]; then
+    prepare_die "$$dev is the OS disk"
+  fi
+  echo "prepare: labeling $$dev"
+  parted -s "$$dev" mklabel gpt
+  parted -a optimal -s "$$dev" mkpart primary 0% 100%
+  parted -s "$$dev" set 1 lvm on
+  udevadm settle
+  if ! align=$$(parted "$$dev" align-check optimal 1 2>&1); then
+    echo "prepare: align-check failed: $$align" >&2
+    echo "prepare: no LVM command was run." >&2
+    exit 1
+  fi
+  if [[ $$align != *aligned* ]]; then
+    echo "prepare: align-check did not report aligned: $$align" >&2
+    echo "prepare: no LVM command was run." >&2
+    exit 1
+  fi
+  echo "prepare: $$align"
+  part=$$(partition_node "$$dev") || prepare_die "partition node did not appear. No LVM command was run."
+  echo "prepare: pvcreate $$part"
+  pvcreate "$$part"
+  vgcreate datavg "$$part"
+  lvcreate -n optlv -l 100%FREE datavg
+  mkfs.xfs /dev/datavg/optlv
+  mount /dev/datavg/optlv /opt
+  src=$$(findmnt -n -o SOURCE /opt 2>/dev/null || true)
+  [[ $$src == /dev/mapper/datavg-optlv ]] || prepare_die "mount did not attach datavg-optlv (source $${src:-empty})"
+}
+
+prepare_directories() {
+  local inst_mode=750
+  if oracle_present; then
+    inst_mode=751
+  fi
+  install -d -o root -g root -m 755 /opt/oracle /opt/nokia /opt/tnms-data
+  install -d -o root -g root -m 755 /opt/oradata/ora1 /opt/oradata/ora2 /opt/oradata/ora3
+  install -d -o root -g root -m 755 /nokia /oradata
+  install -d -o root -g "$$TNMS_ADMIN_GROUP" -m "$$inst_mode" /opt/tnms-install
+  install -d -o root -g "$$TNMS_ADMIN_GROUP" -m 750 /opt/tnms-install/resources
+}
+
+prepare_binds() {
+  local src
+  src=$$(findmnt -n -o SOURCE /nokia 2>/dev/null || true)
+  if [[ $$src != *"[/tnms-data]"* ]]; then
+    if [[ -n $$src ]]; then
+      prepare_die "/nokia is mounted from $$src"
+    fi
+    echo "prepare: bind /opt/tnms-data on /nokia"
+    mount --bind /opt/tnms-data /nokia
+  fi
+  src=$$(findmnt -n -o SOURCE /oradata 2>/dev/null || true)
+  if [[ $$src != *"[/oradata]"* ]]; then
+    if [[ -n $$src ]]; then
+      prepare_die "/oradata is mounted from $$src"
+    fi
+    echo "prepare: bind /opt/oradata on /oradata"
+    mount --bind /opt/oradata /oradata
+  fi
+}
+
+prepare_swap() {
+  local sz src avail
+  src=$$(findmnt -n -o SOURCE /opt 2>/dev/null || true)
+  [[ $$src == /dev/mapper/datavg-optlv ]] || prepare_die "/opt is not datavg-optlv, so the swap file was not created"
+  if swap_is_ready; then
+    echo "prepare: swap file is already active"
+    return 0
+  fi
+  if [[ -e /opt/swapfile ]]; then
+    sz=$$(stat -c %s /opt/swapfile)
+    if [[ $$sz != "$$SWAP_BYTES" ]]; then
+      prepare_die "/opt/swapfile is $$sz bytes, not $$SWAP_BYTES. It was not replaced."
+    fi
+  else
+    avail=$$(df -B1 --output=avail /opt | tail -n 1 | tr -d ' ')
+    if [[ $$avail -lt $$((20 * 1024 * 1024 * 1024)) ]]; then
+      prepare_die "/opt has $$avail bytes free. The swap file was not created."
+    fi
+    echo "prepare: creating 18 GiB /opt/swapfile"
+    dd if=/dev/zero of=/opt/swapfile bs=1G count=18 status=progress
+    chmod 600 /opt/swapfile
+  fi
+  chmod 600 /opt/swapfile
+  if ! swap_is_ready; then
+    mkswap /opt/swapfile
+    swapon /opt/swapfile
+  fi
+  swap_is_ready || prepare_die "swap did not activate"
+}
+
+prepare_fstab() {
+  local uuid add_opt=0 add_nokia=0 add_ora=0 add_swap=0
+  uuid=$$(blkid -s UUID -o value /dev/datavg/optlv 2>/dev/null || true)
+  [[ $$uuid =~ ^[0-9a-fA-F-]+$$ ]] || prepare_die "blkid did not return a UUID for /dev/datavg/optlv. /etc/fstab was not changed."
+  if fstab_has opt "$$uuid"; then
+    :
+  elif fstab_target_exists /opt; then
+    prepare_die "/etc/fstab already has an /opt entry that is not datavg. No line was added."
+  else
+    add_opt=1
+  fi
+  if fstab_has nokia "$$uuid"; then
+    :
+  elif fstab_target_exists /nokia; then
+    prepare_die "/etc/fstab already has a /nokia entry. No line was added."
+  else
+    add_nokia=1
+  fi
+  if fstab_has oradata "$$uuid"; then
+    :
+  elif fstab_target_exists /oradata; then
+    prepare_die "/etc/fstab already has an /oradata entry. No line was added."
+  else
+    add_ora=1
+  fi
+  if fstab_has swap "$$uuid"; then
+    :
+  elif fstab_source_exists /opt/swapfile; then
+    prepare_die "/etc/fstab already has an /opt/swapfile entry. No line was added."
+  else
+    add_swap=1
+  fi
+  if [[ $$add_opt -eq 0 && $$add_nokia -eq 0 && $$add_ora -eq 0 && $$add_swap -eq 0 ]]; then
+    echo "prepare: fstab already has the data disk lines"
+    mount -a
+    return 0
+  fi
+  {
+    if [[ $$add_opt -eq 1 ]]; then
+      printf 'UUID=%s /opt xfs defaults,nofail 0 0\n' "$$uuid"
+    fi
+    if [[ $$add_nokia -eq 1 ]]; then
+      printf '%s\n' '/opt/tnms-data /nokia none bind,nofail 0 0'
+    fi
+    if [[ $$add_ora -eq 1 ]]; then
+      printf '%s\n' '/opt/oradata /oradata none bind,nofail 0 0'
+    fi
+    if [[ $$add_swap -eq 1 ]]; then
+      printf '%s\n' '/opt/swapfile none swap sw,nofail 0 0'
+    fi
+  } >> /etc/fstab
+  systemctl daemon-reload
+  mount -a
+}
+
+prepare_labels() {
+  if labels_ok; then
+    echo "prepare: SELinux labels already match"
+    return 0
+  fi
+  if [[ -d /opt/nokia/tnms/server ]]; then
+    prepare_die "SELinux labels do not match and TNMS is installed. restorecon was not run."
+  fi
+  echo "prepare: restorecon -RF /opt"
+  restorecon -RF /opt
+  chcon -t swapfile_t /opt/swapfile
+  labels_ok || prepare_die "SELinux labels still do not match"
+}
+
+prepare_main() {
+  require_root
+  if prepare_ok >/dev/null 2>&1; then
+    echo "prepare: nothing to do"
+    stamp prepare
+    echo "prepare: done"
+    return 0
+  fi
+  prepare_load_agreement
+  prepare_prechecks
+  prepare_grow
+  prepare_mount_opt
+  prepare_directories
+  prepare_binds
+  prepare_swap
+  prepare_fstab
+  prepare_labels
+  if ! prepare_ok; then
+    echo "prepare: the layout is still incomplete. No stamp was written." >&2
+    exit 1
+  fi
+  stamp prepare
+  echo "prepare: done"
+}
+
+fixture_one() {
+  cat <<'EOF'
+NAME="nvme0n1" TYPE="disk" SIZE="68719476736" FSTYPE="" MOUNTPOINT="" PKNAME=""
+NAME="nvme0n1p1" TYPE="part" SIZE="536870912" FSTYPE="xfs" MOUNTPOINT="/boot" PKNAME="nvme0n1"
+NAME="nvme0n1p2" TYPE="part" SIZE="67108864000" FSTYPE="LVM2_member" MOUNTPOINT="" PKNAME="nvme0n1"
+NAME="rootvg-rootlv" TYPE="lvm" SIZE="2147483648" FSTYPE="xfs" MOUNTPOINT="/" PKNAME="nvme0n1p2"
+NAME="rootvg-homelv" TYPE="lvm" SIZE="1073741824" FSTYPE="xfs" MOUNTPOINT="/home" PKNAME="nvme0n1p2"
+NAME="nvme0n2" TYPE="disk" SIZE="1099511627776" FSTYPE="" MOUNTPOINT="" PKNAME=""
+NAME="sr0" TYPE="rom" SIZE="645120" FSTYPE="" MOUNTPOINT="" PKNAME=""
+EOF
+}
+
+fixture_none() {
+  cat <<'EOF'
+NAME="nvme0n1" TYPE="disk" SIZE="68719476736" FSTYPE="" MOUNTPOINT="" PKNAME=""
+NAME="nvme0n1p2" TYPE="part" SIZE="67108864000" FSTYPE="LVM2_member" MOUNTPOINT="" PKNAME="nvme0n1"
+NAME="rootvg-rootlv" TYPE="lvm" SIZE="2147483648" FSTYPE="xfs" MOUNTPOINT="/" PKNAME="nvme0n1p2"
+NAME="nvme0n2" TYPE="disk" SIZE="1099511627776" FSTYPE="" MOUNTPOINT="" PKNAME=""
+NAME="nvme0n2p1" TYPE="part" SIZE="1099000000000" FSTYPE="xfs" MOUNTPOINT="/data" PKNAME="nvme0n2"
+EOF
+}
+
+fixture_two() {
+  cat <<'EOF'
+NAME="nvme0n1" TYPE="disk" SIZE="68719476736" FSTYPE="" MOUNTPOINT="" PKNAME=""
+NAME="nvme0n1p2" TYPE="part" SIZE="67108864000" FSTYPE="LVM2_member" MOUNTPOINT="" PKNAME="nvme0n1"
+NAME="rootvg-rootlv" TYPE="lvm" SIZE="2147483648" FSTYPE="xfs" MOUNTPOINT="/" PKNAME="nvme0n1p2"
+NAME="nvme0n2" TYPE="disk" SIZE="1099511627776" FSTYPE="" MOUNTPOINT="" PKNAME=""
+NAME="nvme0n3" TYPE="disk" SIZE="1099511627776" FSTYPE="" MOUNTPOINT="" PKNAME=""
+EOF
+}
+
+fixture_boundary() {
+  cat <<'EOF'
+NAME="sda" TYPE="disk" SIZE="68719476736" FSTYPE="" MOUNTPOINT="" PKNAME=""
+NAME="sda1" TYPE="part" SIZE="1000" FSTYPE="xfs" MOUNTPOINT="/" PKNAME="sda"
+NAME="sdb" TYPE="disk" SIZE="100000000000" FSTYPE="" MOUNTPOINT="" PKNAME=""
+NAME="sdc" TYPE="disk" SIZE="99999999999" FSTYPE="" MOUNTPOINT="" PKNAME=""
+EOF
+}
+
+expect_eq() {
+  local got=$$1 want=$$2
+  if [[ $$got != "$$want" ]]; then
+    echo "self-test: expected [$$want] got [$$got]" >&2
+    exit 1
+  fi
+}
+
+fixture_self_test() {
+  local reason got dir mode out
+  local sample='NAME="nvme0n1p2" TYPE="part" SIZE="1" FSTYPE="LVM2_member" MOUNTPOINT="" PKNAME="nvme0n1"'
+  expect_eq "$$(ls_field NAME "$$sample")" "nvme0n1p2"
+  expect_eq "$$(ls_field PKNAME "$$sample")" "nvme0n1"
+  expect_eq "$$(ls_field FSTYPE "$$sample")" "LVM2_member"
+  expect_eq "$$(ls_field MOUNTPOINT "$$sample")" ""
+
+  use_fixture "$$(fixture_one)"
+  expect_eq "$$OS_DISK" "nvme0n1"
+  expect_eq "$$(disk_default)" "nvme0n2"
+  expect_eq "$$(list_candidates)" "nvme0n2"
+  reason=$$(data_disk_block_reason nvme0n2)
+  expect_eq "$$reason" ""
+  reason=$$(data_disk_block_reason /dev/nvme0n1)
+  [[ $$reason == *OS\ disk* ]] || { echo "self-test: OS disk reason [$$reason]" >&2; exit 1; }
+  reason=$$(data_disk_block_reason sr0)
+  [[ -n $$reason ]] || { echo "self-test: rom was accepted" >&2; exit 1; }
+
+  use_fixture "$$(fixture_none)"
+  expect_eq "$$(disk_default)" ""
+  expect_eq "$$(list_candidates)" ""
+  reason=$$(data_disk_block_reason nvme0n2)
+  [[ $$reason == *child\ mount* ]] || { echo "self-test: non-empty reason [$$reason]" >&2; exit 1; }
+
+  use_fixture "$$(fixture_two)"
+  expect_eq "$$OS_DISK" "nvme0n1"
+  expect_eq "$$(disk_default)" ""
+  got=$$(list_candidates)
+  expect_eq "$$got" "nvme0n2
+nvme0n3"
+  reason=$$(data_disk_block_reason nvme0n2)
+  expect_eq "$$reason" ""
+  reason=$$(data_disk_block_reason nvme0n3)
+  expect_eq "$$reason" ""
+  reason=$$(data_disk_block_reason nvme0n1)
+  [[ $$reason == *OS\ disk* ]] || { echo "self-test: two-disk OS reason [$$reason]" >&2; exit 1; }
+
+  use_fixture "$$(fixture_boundary)"
+  expect_eq "$$(disk_default)" "sdb"
+  reason=$$(data_disk_block_reason sdc)
+  [[ $$reason == *smaller\ than\ 100\ GB* ]] || { echo "self-test: size reason [$$reason]" >&2; exit 1; }
+
+  valid_hostname TNMS || { echo "self-test: TNMS rejected" >&2; exit 1; }
+  valid_hostname TN || { echo "self-test: TN rejected" >&2; exit 1; }
+  if valid_hostname "-bad"; then
+    echo "self-test: -bad accepted" >&2
+    exit 1
+  fi
+  if valid_hostname "a-"; then
+    echo "self-test: a- accepted" >&2
+    exit 1
+  fi
+  valid_ipv4 172.16.0.4 || { echo "self-test: ipv4 rejected" >&2; exit 1; }
+  if valid_ipv4 172.16.0.256; then
+    echo "self-test: octet 256 accepted" >&2
+    exit 1
+  fi
+  if home_is_huge 1073741824; then
+    echo "self-test: 1 GiB home was huge" >&2
+    exit 1
+  fi
+  home_is_huge "$$HOME_HUGE" || { echo "self-test: huge home was accepted" >&2; exit 1; }
+
+  out=$$(answers_lines nvme0n2 yes TNMS azureuser 172.16.0.4)
+  [[ $$out == *'CONFIRM=yes'* ]] || { echo "self-test: CONFIRM missing" >&2; exit 1; }
+  [[ $$out == *'TNMS_DATA_DISK=/dev/nvme0n2'* ]] || { echo "self-test: disk missing" >&2; exit 1; }
+  [[ $$out == *'TNMS_GROW=yes'* ]] || { echo "self-test: grow missing" >&2; exit 1; }
+  [[ $$out != *SYS_PASSWORD* && $$out != *TnZT5hgW8Zwsp79* ]] || { echo "self-test: password landed in answers" >&2; exit 1; }
+
+  dir=$$(mktemp -d)
+  printf '%s\n' 'CONFIRM=$$(touch pwned)' 'TNMS_HOSTNAME=TNMS' 'TNMS_ADMIN_GROUP=azureuser' > "$$dir/bad"
+  load_answers "$$dir/bad"
+  [[ $$ANS_CONFIRM != yes ]] || { echo "self-test: unsafe CONFIRM was accepted" >&2; exit 1; }
+  [[ ! -e $$dir/pwned ]] || { echo "self-test: answers file was executed" >&2; exit 1; }
+  expect_eq "$$ANS_HOST" "TNMS"
+  printf '%s\n' 'TNMS_DATA_DISK=/dev/nvme0n2' 'TNMS_GROW=yes' 'TNMS_HOSTNAME=TNMS' 'TNMS_ADMIN_GROUP=azureuser' 'TNMS_IP=172.16.0.4' 'CONFIRM=yes' > "$$dir/good"
+  load_answers "$$dir/good"
+  expect_eq "$$ANS_CONFIRM" "yes"
+  expect_eq "$$ANS_DISK" "/dev/nvme0n2"
+  expect_eq "$$ANS_GROW" "yes"
+  expect_eq "$$ANS_IP" "172.16.0.4"
+  commit_answers no "$$dir/out" nvme0n2 yes TNMS azureuser ""
+  [[ ! -e $$dir/out ]] || { echo "self-test: declined answers were written" >&2; exit 1; }
+  commit_answers yes "$$dir/out" nvme0n2 yes TNMS azureuser ""
+  [[ -f $$dir/out ]] || { echo "self-test: answers were not written" >&2; exit 1; }
+  mode=$$(stat -c %a "$$dir/out")
+  expect_eq "$$mode" "600"
+  grep -q '^CONFIRM=yes$$' "$$dir/out"
+  printf '%b\n' '\043 UUID=abc /opt xfs defaults,nofail 0 0' > "$$dir/fstab"
+  if fstab_has opt abc "$$dir/fstab"; then
+    echo "self-test: a comment was treated as an fstab mount" >&2
+    exit 1
+  fi
+  printf '%s\n' 'UUID=abc /opt xfs defaults,nofail 0 0' '/opt/tnms-data /nokia none bind,nofail 0 0' >> "$$dir/fstab"
+  fstab_has opt abc "$$dir/fstab"
+  fstab_has nokia "" "$$dir/fstab"
+  fstab_target_exists /nokia "$$dir/fstab"
+  printf '%s\n' 'TNMS_HOSTNAME=bad name' 'CONFIRM=yes' > "$$dir/host"
+  load_answers "$$dir/host"
+  expect_eq "$$ANS_HOST" ""
+  expect_eq "$$ANS_CONFIRM" "yes"
+  use_fixture "$$(fixture_one)"
+  OPT_SRC=
+  HOME_B=1073741824
+  HOME_SRC=/dev/mapper/rootvg-homelv
+  GROW_STATE=offer
+  VG_FREE=100
+  GROW_NEED=10
+  TMP_OPTS=
+  got=$$(print_actions)
+  [[ $$got == *'default data disk /dev/nvme0n2'* ]] || { echo "self-test: action list missed the default disk" >&2; exit 1; }
+  [[ $$got == *'about 1 GB'* ]] || { echo "self-test: small home note missing" >&2; exit 1; }
+  HOME_B=$$HOME_HUGE
+  got=$$(print_actions)
+  [[ $$got == *'prepare will not continue'* ]] || { echo "self-test: huge home was not a stop" >&2; exit 1; }
+  rm -rf "$$dir"
+  echo "self-test: disk fixtures ok"
+}
+
 cmd=$${1:-}
 case "$$cmd" in
   status) status_main ;;
@@ -1147,6 +2522,8 @@ case "$$cmd" in
   sudo) sudo_main ;;
   service) service_main ;;
   check) check_main ;;
+  scan) scan_main ;;
+  prepare) prepare_main ;;
   self-test) self_test ;;
   *)
     echo "Unknown installer command: $${cmd:-empty}" >&2
@@ -1156,33 +2533,43 @@ esac
 endef
 export LIB
 
-.PHONY: all help status script self-test stage host packages kernel disk unpack credentials oracle wizard lsmem sftp sudo service check
+.PHONY: all help status script self-test scan prepare stage host packages kernel disk unpack credentials oracle wizard lsmem sftp sudo service check
 
 all: check
 
 help:
 	cat <<-'EOF'
-	TNMS 9.1 install. Run as root after pre-install has mounted /opt.
-	
+	TNMS 9.1 install. Run as root.
+
 	  dnf -y install make
+	  make -C /tmp -f Makefile scan
+	  make -C /tmp -f Makefile prepare
 	  make -C /tmp -f Makefile
-	
+
+	  make scan         read the host and ask before any disk change
+	  make prepare      apply the agreed disk layout
 	  make status       read-only report of the install conditions
 	  make check        finish any step that is not done, then run the checks
 	  make <target>     run through that step
-	
-	Targets, in order:
-	  stage host packages kernel disk unpack credentials oracle wizard lsmem sftp sudo service check
-	
-	disk, check, and status always run. The other targets record a stamp in
-	/var/lib/tnms-install and skip work that is already done. Oracle and the
-	TNMS wizard still run only when the product is absent.
-	
+
+	Run scan, then prepare, then the install targets:
+	  scan
+	  prepare stage host packages kernel disk unpack credentials oracle wizard lsmem sftp sudo service check
+
+	scan only reads. On a terminal it can write /root/tnms-install.answers.
+	Without a terminal it prints the answers to write and exits 2.
+	prepare records a stamp in /var/lib/tnms-install. disk, check, and status
+	always run. The other stamped targets skip work that is already done.
+	Oracle and the TNMS wizard still run only when the product is absent.
+
 	Overrides (command line or /root/tnms-install.local.mk):
-	  TNMS_HOSTNAME TNMS_IP TNMS_ADMIN_GROUP TNMS_SID
+	  TNMS_HOSTNAME TNMS_IP TNMS_ADMIN_GROUP TNMS_SID TNMS_DATA_DISK
 	  SYS_PASSWORD SYSTEM_PASSWORD TNMSDBA_PASSWORD TNMS_SFTP_PASSWORD
-	
-	self-test checks the sshd edit on a temporary file.
+
+	prepare reads TNMS_DATA_DISK, TNMS_GROW, and CONFIRM=yes from
+	/root/tnms-install.answers. make scan writes that file after an explicit yes.
+
+	self-test checks the sshd edit and the disk classification fixtures.
 	EOF
 
 script:
@@ -1190,6 +2577,12 @@ script:
 
 self-test:
 	printf '%s\n' "$$LIB" | bash -s -- self-test
+
+scan:
+	echo '=== scan (read-only) ==='
+	printf '%s\n' "$$LIB" | bash -s -- scan
+
+prepare: $(STAMP)/prepare
 
 status:
 	echo '=== status (read-only) ==='
@@ -1199,7 +2592,11 @@ disk:
 	echo '=== disk ==='
 	printf '%s\n' "$$LIB" | bash -s -- disk
 
-$(STAMP)/stage:
+$(STAMP)/prepare:
+	echo '=== prepare ==='
+	printf '%s\n' "$$LIB" | bash -s -- prepare
+
+$(STAMP)/stage: $(STAMP)/prepare
 	echo '=== stage: directories, media, and modes ==='
 	printf '%s\n' "$$LIB" | bash -s -- stage
 

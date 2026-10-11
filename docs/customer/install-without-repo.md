@@ -1,6 +1,8 @@
 # TNMS 9.1 on RHEL 8 — install without this repository
 
-Run this on a fresh Red Hat Enterprise Linux 8 server, as root, after [pre-install.md](pre-install.md). That guide mounts the 1 TB disk on `/opt`. This one installs Oracle 19c and TNMS 9.1.0.593.0 Server and Mediation.
+Run this on a fresh Red Hat Enterprise Linux 8 server, as root. The Makefile scans the host, asks before it changes a disk, and then installs Oracle 19c and TNMS 9.1.0.593.0 Server and Mediation.
+
+[pre-install.md](pre-install.md) is the picture of the disk layout. `make prepare` applies sections 2 through 4 of that page.
 
 One machine. Small Plus. TNMS Server and Mediation together. New database.
 
@@ -35,18 +37,25 @@ On the server, as root:
 
 ```bash
 dnf -y install make
+make -C /tmp -f Makefile scan
+make -C /tmp -f Makefile prepare
 make -C /tmp -f Makefile
 ```
 
-`make` reads the file before `stage` removes the `/tmp` copies, then continues from `/opt/tnms-install`. A later run can use `make -C /opt/tnms-install`.
+`make scan` only reads. It prints the release, the disks, the hostname, and which of the six install files are in `/tmp`. On a terminal it asks for the data disk, whether to grow `/` and `/tmp`, the short hostname, and the admin group. It asks for an IPv4 address only when detection fails or more than one global address exists. The last question is whether to write `/root/tnms-install.answers` at mode 600. `CONFIRM=yes` is written only after that yes. Declining writes nothing. Without a terminal, scan prints the same report and the lines to put in that file, then exits 2.
 
-`make status` only reads the host. It prints `ok` or `MISSING` for each condition and does not install, restart, or write a stamp. Stamps live in `/var/lib/tnms-install/`. A missing stamp does not by itself repeat Oracle or the TNMS wizard. Those two commands run only when the product is absent.
+`make prepare` reads that file and applies the disk layout: grow `/` and `/tmp`, partition the named data disk, mount it on `/opt`, bind `/nokia` and `/oradata`, create the 18 GB swap file, write `/etc/fstab`, and restore SELinux labels. It refuses to run without `CONFIRM=yes`. When the layout already matches, it stamps and skips. A later `prepare` leaves an existing `datavg-optlv` partition in place.
+
+`make` then installs Oracle and TNMS. It reads the Makefile before `stage` removes the `/tmp` copies, then continues from `/opt/tnms-install`. A later run can use `make -C /opt/tnms-install`.
+
+`make status` only reads the host. It prints the scan facts, says whether prepare is satisfied, and prints `ok` or `MISSING` for each condition. It does not install, restart, or write a stamp. Stamps live in `/var/lib/tnms-install/`. A missing stamp does not by itself repeat Oracle or the TNMS wizard. Those two commands run only when the product is absent.
 
 `make help` lists the targets. `make check` is the default goal: it finishes any target that is not done, then runs the checks at the end of this page.
 
 These stay outside `make`:
 
-- The disk layout in [pre-install.md](pre-install.md). The first recipe stops unless `findmnt` shows `/opt` on `/dev/mapper/datavg-optlv`.
+- The VS Code symlink in [pre-install.md](pre-install.md) section 6. Scan mentions it when `/home` is about 1 GB.
+- A reboot, if you want to confirm the mounts survive. `prepare` writes `/etc/fstab` and does not reboot.
 - The `scp` above. The zip files are not in the repository, so there is no `make push`.
 - The Azure security group for TCP 8444.
 - The first client password change after login.
@@ -61,6 +70,7 @@ Set these on the `make` command line or in `/root/tnms-install.local.mk`. The de
 | `TNMS_HOSTNAME` | `TNMS` | Short hostname |
 | `TNMS_IP` | detected | Server IPv4. Empty uses the same route lookup as the wizard. |
 | `TNMS_ADMIN_GROUP` | `azureuser` | Group on `/opt/tnms-install`, and the SSH account name in the sftp check |
+| `TNMS_DATA_DISK` | chosen by `make scan` | Whole disk that `make prepare` partitions. Recorded in `/root/tnms-install.answers`. |
 | `TNMS_SID` | `TNMS` | Oracle SID |
 | `SYS_PASSWORD` | `TnZT5hgW8Zwsp79` | Oracle `SYS` |
 | `SYSTEM_PASSWORD` | `TnZT5hgW8Zwsp79` | Oracle `SYSTEM`. Same value as `SYS`. |
@@ -68,6 +78,8 @@ Set these on the `make` command line or in `/root/tnms-install.local.mk`. The de
 | `TNMS_SFTP_PASSWORD` | `Tsvb5-Xe8ou3wR9` | OS account `tnms_sftp` |
 
 The hosts line uses `TNMS_IP` and the `search` domain from `/etc/resolv.conf`. The FQDN is first, then the short name.
+
+`make scan` also records `TNMS_GROW=yes` when the operator agrees to grow `rootlv` and `tmplv`, and `CONFIRM=yes` only after the operator agrees to write the file. `make prepare` reads those two from `/root/tnms-install.answers`. A command line or `/root/tnms-install.local.mk` overrides the hostname, address, and admin group for the later install targets. The data disk `prepare` partitions is the one in the answers file.
 
 Password rule used for `SYS`, `SYSTEM`, and `tnmsdba`: 6 to 30 characters from `a-z`, `A-Z`, `0-9`, and `+ - _ { }`. `tnmsdba` is a different value from `SYS`. The SFTP password is separate again.
 
@@ -111,7 +123,29 @@ Allow inbound TCP 8444 on the security group in front of the server. The browser
 
 ## Targets
 
-`make` runs the targets below in order. Each one checks the result before it writes its stamp. Run one target with `make -C /opt/tnms-install <target>` after the Makefile is on `/opt`.
+`make` runs `prepare` and then the targets below. Each one checks the result before it writes its stamp. Run one target with `make -C /opt/tnms-install <target>` after the Makefile is on `/opt`.
+
+### scan
+
+Reads the host and writes no stamp. Fixed product requirements are stated, not asked: `/` at 8 GB, `/tmp` at 16 GB, 18 GB swap, SID `TNMS`, and the paths already in this guide. Passwords stay the variables above. Scan names them and does not prompt, so they do not land in shell history.
+
+The data-disk default is the single whole disk that is not the OS disk, is at least 100 GB, and has no filesystem and no mount. Zero candidates or more than one means there is no default. If `rootvg` does not have room to grow, scan says how much is free and how much is required, and does not offer the grow.
+
+### prepare
+
+Applies the agreed layout and writes `/var/lib/tnms-install/prepare`. It will not:
+
+- Partition or label a disk that has a filesystem, a mount, or a child mount, including when the answers name it.
+- Use the OS disk as the data disk.
+- Continue when `/home` is on a terabyte-scale volume. That means the data disk was added to `homelv`.
+- Mount over `/opt` when `/opt` already contains names and is not already `datavg-optlv`.
+- Append a second copy of an `/etc/fstab` line.
+- Run `restorecon` on the `/nokia` or `/oradata` bind mounts. After `restorecon -RF /opt`, it sets `swapfile_t` on `/opt/swapfile`.
+- Repartition when `/opt` is already `datavg-optlv`. It only fills in missing binds, swap, or fstab lines.
+- Grow a volume that is already at the target size.
+- Run the VS Code symlink, open TCP 8444, or change passwords.
+
+Partitioning uses `parted -a optimal` and `mkpart` from `0%` to `100%`, then `parted align-check optimal 1` before `pvcreate`. A failed alignment check stops before any LVM write.
 
 ### stage
 
