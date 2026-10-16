@@ -1141,6 +1141,12 @@ LS_SIZE=()
 LS_FS=()
 LS_MNT=()
 LS_PK=()
+LS_PT=()
+LS_SIG=()
+LS_HOLD=()
+LS_TAB=()
+SYSTEM_DISKS=()
+SYSTEM_HOLD=()
 OS_DISK=
 ANSWERS=/root/tnms-install.answers
 TARGET_ROOT=$$((8 * 1024 * 1024 * 1024))
@@ -1197,6 +1203,10 @@ lsblk_load() {
   LS_FS=()
   LS_MNT=()
   LS_PK=()
+  LS_PT=()
+  LS_SIG=()
+  LS_HOLD=()
+  LS_TAB=()
   while IFS= read -r line; do
     [[ -z $$line ]] && continue
     LS_NAME+=("$$(ls_field NAME "$$line")")
@@ -1205,6 +1215,10 @@ lsblk_load() {
     LS_FS+=("$$(ls_field FSTYPE "$$line")")
     LS_MNT+=("$$(ls_field MOUNTPOINT "$$line")")
     LS_PK+=("$$(ls_field PKNAME "$$line")")
+    LS_PT+=("$$(ls_field PTTYPE "$$line")")
+    LS_SIG+=("$$(ls_field WIPESIG "$$line")")
+    LS_HOLD+=("$$(ls_field HOLDERS "$$line")")
+    LS_TAB+=("$$(ls_field FSTAB "$$line")")
   done <<<"$$text"
 }
 
@@ -1272,6 +1286,217 @@ strip_dev() {
   fi
 }
 
+sig_is_table() {
+  local t=$${1,,}
+  case $$t in
+    gpt|dos|msdos|pmbr|atari|sun|sgi|bsd|mac) return 0 ;;
+  esac
+  return 1
+}
+
+fstab_line_names_disk() {
+  local name=$$1 line=$$2 re
+  if [[ $$name =~ [0-9]$$ ]]; then
+    re='(^|[[:space:]])/dev/'"$$name"'($$|[[:space:]]|p[0-9]+($$|[[:space:]]))'
+  else
+    re='(^|[[:space:]])/dev/'"$$name"'($$|[[:space:]]|[0-9]+($$|[[:space:]]))'
+  fi
+  [[ $$line =~ $$re ]]
+}
+
+fstab_names_disk() {
+  local name=$$1 file=$${2:-/etc/fstab} line mark
+  [[ -f $$file ]] || return 1
+  mark=$$(printf '\043')
+  while IFS= read -r line || [[ -n $$line ]]; do
+    [[ -z $$line ]] && continue
+    if [[ $$line =~ ^[[:space:]]*$$mark ]]; then
+      continue
+    fi
+    if fstab_line_names_disk "$$name" "$$line"; then
+      return 0
+    fi
+  done < "$$file"
+  return 1
+}
+
+disk_is_system() {
+  local name=$$1 i
+  for i in "$${!SYSTEM_DISKS[@]}"; do
+    if [[ $${SYSTEM_DISKS[$$i]} == "$$name" ]]; then
+      return 0
+    fi
+  done
+  return 1
+}
+
+system_hold_text() {
+  local name=$$1 i
+  for i in "$${!SYSTEM_DISKS[@]}"; do
+    if [[ $${SYSTEM_DISKS[$$i]} == "$$name" ]]; then
+      printf '%s' "$${SYSTEM_HOLD[$$i]}"
+      return 0
+    fi
+  done
+  return 1
+}
+
+system_disk_count() {
+  local i n=0
+  for i in "$${!SYSTEM_DISKS[@]}"; do
+    n=$$((n + 1))
+  done
+  printf '%s' "$$n"
+}
+
+collect_system_disks() {
+  local mnt disk i found
+  SYSTEM_DISKS=()
+  SYSTEM_HOLD=()
+  OS_DISK=$$(ls_disk_of_mount / || true)
+  for mnt in / /boot /boot/efi /home /usr /var /tmp /var/log /var/tmp; do
+    disk=$$(ls_disk_of_mount "$$mnt" || true)
+    [[ -n $$disk ]] || continue
+    found=0
+    for i in "$${!SYSTEM_DISKS[@]}"; do
+      if [[ $${SYSTEM_DISKS[$$i]} == "$$disk" ]]; then
+        SYSTEM_HOLD[$$i]="$${SYSTEM_HOLD[$$i]}, $$mnt"
+        found=1
+        break
+      fi
+    done
+    if [[ $$found -eq 0 ]]; then
+      SYSTEM_DISKS+=("$$disk")
+      SYSTEM_HOLD+=("$$mnt")
+    fi
+  done
+}
+
+parse_wipefs_text() {
+  awk '
+  {
+    line = $$0
+    if (line ~ /^-+$$/) next
+    n = split(line, a, ",")
+    found = 0
+    for (i = 1; i <= n; i++) {
+      if (a[i] ~ /^type=/) {
+        sub(/^type=/, "", a[i])
+        if (a[i] != "") print a[i]
+        found = 1
+      }
+    }
+    if (found) next
+    nf = split(line, f, /[[:space:]]+/)
+    for (i = 1; i <= nf; i++) {
+      if (f[i] ~ /^0x[0-9a-fA-F]+$$/) {
+        if (i < nf) print f[i + 1]
+        break
+      }
+    }
+    if (nf == 1) {
+      low = tolower(f[1])
+      if (low != "offset" && low != "type" && low != "device" && low != "uuid" && low != "label" && low != "usage" && low != "length")
+        print f[1]
+    }
+  }
+  '
+}
+
+wipefs_types() {
+  local dev=$$1 text
+  if text=$$(wipefs -n -i -O TYPE "$$dev" 2>/dev/null); then
+    :
+  else
+    text=$$(wipefs -n "$$dev" 2>/dev/null || true)
+  fi
+  parse_wipefs_text <<<"$$text"
+}
+
+disk_enrich_live() {
+  local i name tok hold h probe line key val
+  for i in "$${!LS_NAME[@]}"; do
+    [[ $${LS_TYPE[$$i]} == disk ]] || continue
+    name=$${LS_NAME[$$i]}
+    if command -v wipefs >/dev/null 2>&1; then
+      while IFS= read -r tok; do
+        [[ -z $$tok ]] && continue
+        if sig_is_table "$$tok"; then
+          if [[ -z $${LS_PT[$$i]} ]]; then
+            LS_PT[$$i]=$$tok
+          fi
+        elif [[ -z $${LS_SIG[$$i]} ]]; then
+          LS_SIG[$$i]=$$tok
+        fi
+      done < <(wipefs_types "/dev/$$name")
+    elif command -v blkid >/dev/null 2>&1; then
+      probe=$$(blkid -p -o export "/dev/$$name" 2>/dev/null || true)
+      while IFS= read -r line; do
+        [[ -z $$line ]] && continue
+        IFS='=' read -r key val <<<"$$line"
+        if [[ $$key == PTTYPE && -n $$val && -z $${LS_PT[$$i]} ]]; then
+          LS_PT[$$i]=$$val
+        fi
+        if [[ $$key == TYPE && -n $$val ]]; then
+          if sig_is_table "$$val"; then
+            if [[ -z $${LS_PT[$$i]} ]]; then
+              LS_PT[$$i]=$$val
+            fi
+          elif [[ -z $${LS_SIG[$$i]} ]]; then
+            LS_SIG[$$i]=$$val
+          fi
+        fi
+      done <<<"$$probe"
+    fi
+    hold=0
+    for h in /sys/block/$$name/holders/*; do
+      if [[ -e $$h ]]; then
+        hold=1
+        break
+      fi
+    done
+    if [[ $$hold -eq 1 ]]; then
+      LS_HOLD[$$i]=yes
+    fi
+    if fstab_names_disk "$$name"; then
+      LS_TAB[$$i]=yes
+    fi
+  done
+}
+
+load_disk_view() {
+  local text
+  text=$$(lsblk -P -b -o NAME,TYPE,SIZE,FSTYPE,MOUNTPOINT,PKNAME,PTTYPE 2>/dev/null || true)
+  lsblk_load "$$text"
+  disk_enrich_live
+  collect_system_disks
+}
+
+disk_has_signature() {
+  local i=$$1 fs=$${LS_FS[$$i]} sig=$${LS_SIG[$$i]}
+  if [[ -n $$fs ]] && ! sig_is_table "$$fs"; then
+    return 0
+  fi
+  if [[ -n $$sig ]] && ! sig_is_table "$$sig"; then
+    return 0
+  fi
+  return 1
+}
+
+disk_has_table() {
+  local i=$$1 pt=$${LS_PT[$$i]} fs=$${LS_FS[$$i]} sig=$${LS_SIG[$$i]}
+  if [[ -n $$pt ]]; then
+    return 0
+  fi
+  if [[ -n $$fs ]] && sig_is_table "$$fs"; then
+    return 0
+  fi
+  if [[ -n $$sig ]] && sig_is_table "$$sig"; then
+    return 0
+  fi
+  return 1
+}
+
 data_disk_block_reason() {
   local name="" i="" size="" j=""
   name=$$(strip_dev "$$1")
@@ -1283,12 +1508,24 @@ data_disk_block_reason() {
     echo "is not a whole disk"
     return 0
   fi
-  if [[ -n $${OS_DISK:-} && $$name == "$$OS_DISK" ]]; then
-    echo "is the OS disk"
+  if [[ -z $${OS_DISK:-} ]]; then
+    echo "the system disk was not identified"
     return 0
   fi
-  if [[ -n $${LS_FS[$$i]} ]]; then
-    echo "has a filesystem"
+  if disk_is_system "$$name"; then
+    echo "is a system disk"
+    return 0
+  fi
+  if [[ -n $${LS_HOLD[$$i]} ]]; then
+    echo "has holders"
+    return 0
+  fi
+  if [[ -n $${LS_TAB[$$i]} ]]; then
+    echo "is named in fstab"
+    return 0
+  fi
+  if disk_has_signature "$$i"; then
+    echo "has a signature"
     return 0
   fi
   if [[ -n $${LS_MNT[$$i]} ]]; then
@@ -1309,6 +1546,10 @@ data_disk_block_reason() {
       return 0
     fi
   done
+  if disk_has_table "$$i"; then
+    echo "has a partition table"
+    return 0
+  fi
   size=$${LS_SIZE[$$i]}
   if [[ ! $$size =~ ^[0-9]+$$ ]]; then
     echo "has no size"
@@ -1336,22 +1577,76 @@ list_candidates() {
   done
 }
 
+other_disks() {
+  local i name
+  for i in "$${!LS_NAME[@]}"; do
+    [[ $${LS_TYPE[$$i]} == disk ]] || continue
+    name=$${LS_NAME[$$i]}
+    if disk_is_system "$$name"; then
+      continue
+    fi
+    printf '%s\n' "$$name"
+  done
+}
+
 disk_default() {
-  local c n=0 one=""
+  local n_sys n_other=0 one="" c
+  [[ -n $${OS_DISK:-} ]] || return 0
+  n_sys=$$(system_disk_count)
+  [[ $$n_sys -eq 1 ]] || return 0
   while IFS= read -r c; do
     [[ -z $$c ]] && continue
-    n=$$((n + 1))
+    n_other=$$((n_other + 1))
     one=$$c
-  done < <(list_candidates)
-  if [[ $$n -eq 1 ]]; then
+  done < <(other_disks)
+  [[ $$n_other -eq 1 ]] || return 0
+  if disk_is_candidate "$$one"; then
     printf '%s' "$$one"
+  fi
+}
+
+disk_at() {
+  local want=$$1 i n=0
+  [[ $$want =~ ^[0-9]+$$ ]] || return 1
+  for i in "$${!LS_NAME[@]}"; do
+    [[ $${LS_TYPE[$$i]} == disk ]] || continue
+    n=$$((n + 1))
+    if [[ $$n -eq $$want ]]; then
+      printf '%s' "$${LS_NAME[$$i]}"
+      return 0
+    fi
+  done
+  return 1
+}
+
+default_disk_number() {
+  local want=$$1 i n=0
+  [[ -n $$want ]] || return 1
+  for i in "$${!LS_NAME[@]}"; do
+    [[ $${LS_TYPE[$$i]} == disk ]] || continue
+    n=$$((n + 1))
+    if [[ $${LS_NAME[$$i]} == "$$want" ]]; then
+      printf '%s' "$$n"
+      return 0
+    fi
+  done
+  return 1
+}
+
+disk_prompt_label() {
+  local def="" num=""
+  def=$$(disk_default || true)
+  if [[ -n $$def ]] && num=$$(default_disk_number "$$def"); then
+    printf 'Data disk [%s]: ' "$$num"
+  else
+    printf 'Data disk: '
   fi
 }
 
 use_fixture() {
   local text=$$1
   lsblk_load "$$text"
-  OS_DISK=$$(ls_disk_of_mount / || true)
+  collect_system_disks
 }
 
 lv_bytes() {
@@ -1375,6 +1670,23 @@ show_bytes() {
     return 0
   fi
   awk -v b="$$b" 'BEGIN { printf "%s bytes (%.2f GiB)", b, b/1024/1024/1024 }'
+}
+
+short_bytes() {
+  local b=$${1:-}
+  if [[ ! $$b =~ ^[0-9]+$$ ]]; then
+    printf 'unknown'
+    return 0
+  fi
+  awk -v b="$$b" 'BEGIN {
+    t = 1024 * 1024 * 1024 * 1024
+    g = 1024 * 1024 * 1024
+    m = 1024 * 1024
+    if (b >= t) printf "%.1fT", b / t
+    else if (b >= g) printf "%.0fG", b / g
+    else if (b >= m) printf "%.0fM", b / m
+    else printf "%dB", b
+  }'
 }
 
 home_is_huge() {
@@ -1659,26 +1971,35 @@ prepare_ok() {
   return "$$bad"
 }
 
-print_other_disks() {
-  local i j name any=0 disk_any=0
+disk_list_note() {
+  local name=$$1 reason="" hold=""
+  if [[ -n $${OS_DISK:-} ]] && disk_is_system "$$name"; then
+    if [[ $$name == "$$OS_DISK" ]]; then
+      printf 'system, holds /'
+    else
+      hold=$$(system_hold_text "$$name" || true)
+      printf 'system, holds %s' "$$hold"
+    fi
+    return 0
+  fi
+  reason=$$(data_disk_block_reason "$$name")
+  if [[ -z $$reason ]]; then
+    printf 'eligible, raw, no partition table, no signature'
+  else
+    printf 'not eligible, %s' "$$reason"
+  fi
+}
+
+print_disk_list() {
+  local i n=0 name
+  echo "disks:"
   for i in "$${!LS_NAME[@]}"; do
     [[ $${LS_TYPE[$$i]} == disk ]] || continue
-    [[ $${LS_NAME[$$i]} == "$${OS_DISK:-}" ]] && continue
-    disk_any=1
+    n=$$((n + 1))
     name=$${LS_NAME[$$i]}
-    echo "  $$name $$(show_bytes "$${LS_SIZE[$$i]}")"
-    any=0
-    for j in "$${!LS_NAME[@]}"; do
-      if ls_under "$${LS_NAME[$$j]}" "$$name"; then
-        any=1
-        echo "    $${LS_TYPE[$$j]} $${LS_NAME[$$j]} fs=$${LS_FS[$$j]:-none} mount=$${LS_MNT[$$j]:-none}"
-      fi
-    done
-    if [[ $$any -eq 0 ]]; then
-      echo "    no partitions"
-    fi
+    printf '  %d  %-8s %5s   %s\n' "$$n" "$$name" "$$(short_bytes "$${LS_SIZE[$$i]}")" "$$(disk_list_note "$$name")"
   done
-  if [[ $$disk_any -eq 0 ]]; then
+  if [[ $$n -eq 0 ]]; then
     echo "  none"
   fi
 }
@@ -1723,10 +2044,12 @@ print_actions() {
     echo "  disk: /opt is already datavg-optlv. prepare will not repartition"
   else
     def=$$(disk_default || true)
-    if [[ -n $$def ]]; then
+    if [[ -z $${OS_DISK:-} ]]; then
+      echo "  disk: the system disk was not identified. No disk is eligible."
+    elif [[ -n $$def ]]; then
       echo "  disk: default data disk /dev/$$def"
     else
-      echo "  disk: no single empty data disk. prepare needs TNMS_DATA_DISK"
+      echo "  disk: no default. Pick a disk from the list."
     fi
   fi
   if home_blocks; then
@@ -1745,8 +2068,7 @@ scan_collect() {
   SELINUX=$$(getenforce 2>/dev/null || true)
   NCPU=$$(nproc 2>/dev/null || true)
   RAM_LINE=$$(awk '/MemTotal/ { printf "%.0f GB", $$2 / 1024 / 1024 }' /proc/meminfo 2>/dev/null || true)
-  lsblk_load "$$(lsblk -P -b -o NAME,TYPE,SIZE,FSTYPE,MOUNTPOINT,PKNAME 2>/dev/null || true)"
-  OS_DISK=$$(ls_disk_of_mount / || true)
+  load_disk_view
   ROOT_B=$$(lv_bytes /dev/rootvg/rootlv || true)
   TMP_B=$$(lv_bytes /dev/rootvg/tmplv || true)
   HOME_LV_B=$$(lv_bytes /dev/rootvg/homelv || true)
@@ -1817,6 +2139,9 @@ scan_report() {
   echo "cpu: $${NCPU:-unknown}"
   echo "ram: $${RAM_LINE:-unknown}"
   echo "os-disk: $${OS_DISK:-unknown}"
+  if [[ -z $${OS_DISK:-} ]]; then
+    echo "system-disk: not identified. No disk is eligible."
+  fi
   echo "rootlv: $$(show_bytes "$$ROOT_B")"
   echo "tmplv: $$(show_bytes "$$TMP_B")"
   echo "homelv: $$(show_bytes "$$HOME_LV_B")"
@@ -1826,8 +2151,7 @@ scan_report() {
   else
     echo "tmp-noexec: no"
   fi
-  echo "other-disks:"
-  print_other_disks
+  print_disk_list
   print_roms
   echo "opt: $${OPT_SRC:-not-mounted}"
   echo "nokia: $${NOKIA_SRC:-not-mounted}"
@@ -1909,25 +2233,34 @@ print_proposed_answers() {
 scan_ask() {
   local disk="" grow="" host="" group="" ip="" reply="" def="" reason="" tries=0 group_default="" ip_default=""
   if [[ $${OPT_SRC:-} != /dev/mapper/datavg-optlv ]]; then
-    def=$$(disk_default || true)
     tries=0
     while [[ $$tries -lt 20 ]]; do
       tries=$$((tries + 1))
-      if ! reply=$$(prompt_value "Data disk" "$$def"); then
-        echo "scan: type the data disk device" >/dev/tty
-        def=
-        continue
+      load_disk_view
+      def=$$(disk_default || true)
+      print_disk_list >/dev/tty
+      printf '%s' "$$(disk_prompt_label)" >/dev/tty
+      IFS= read -r reply </dev/tty || reply=
+      if [[ -z $$reply ]]; then
+        if [[ -z $$def ]]; then
+          echo "scan: type a disk number or a /dev name" >/dev/tty
+          continue
+        fi
+        reply=$$def
+      elif [[ $$reply =~ ^[0-9]+$$ ]]; then
+        if ! reply=$$(disk_at "$$reply"); then
+          echo "scan: that number is not in the list" >/dev/tty
+          continue
+        fi
+      else
+        reply=$$(strip_dev "$$reply")
       fi
-      reply=$$(strip_dev "$$reply")
-      lsblk_load "$$(lsblk -P -b -o NAME,TYPE,SIZE,FSTYPE,MOUNTPOINT,PKNAME 2>/dev/null || true)"
-      OS_DISK=$$(ls_disk_of_mount / || true)
       reason=$$(data_disk_block_reason "$$reply")
       if [[ -z $$reason ]]; then
         disk=$$reply
         break
       fi
       echo "scan: /dev/$$reply $$reason" >/dev/tty
-      def=
     done
     [[ -n $$disk ]] || scan_die "stopped without a data disk"
   fi
@@ -2143,15 +2476,14 @@ prepare_mount_opt() {
   [[ -n $$ANS_DISK ]] || prepare_die "TNMS_DATA_DISK is empty"
   dev=$$ANS_DISK
   [[ -b $$dev ]] || prepare_die "$$dev is not a block device"
-  lsblk_load "$$(lsblk -P -b -o NAME,TYPE,SIZE,FSTYPE,MOUNTPOINT,PKNAME)"
-  OS_DISK=$$(ls_disk_of_mount / || true)
+  load_disk_view
   [[ -n $$OS_DISK ]] || prepare_die "could not identify the OS disk. No disk was labeled."
   reason=$$(data_disk_block_reason "$$dev")
-  [[ -z $$reason ]] || prepare_die "$$dev $$reason"
+  [[ -z $$reason ]] || prepare_die "$$dev $$reason. No disk was labeled."
   os_dev=$$(readlink -f "/dev/$$OS_DISK")
   data_dev=$$(readlink -f "$$dev")
   if [[ -n $$os_dev && $$data_dev == "$$os_dev" ]]; then
-    prepare_die "$$dev is the OS disk"
+    prepare_die "$$dev is the OS disk. No disk was labeled."
   fi
   echo "prepare: labeling $$dev"
   parted -s "$$dev" mklabel gpt
@@ -2353,7 +2685,7 @@ fixture_none() {
 NAME="nvme0n1" TYPE="disk" SIZE="68719476736" FSTYPE="" MOUNTPOINT="" PKNAME=""
 NAME="nvme0n1p2" TYPE="part" SIZE="67108864000" FSTYPE="LVM2_member" MOUNTPOINT="" PKNAME="nvme0n1"
 NAME="rootvg-rootlv" TYPE="lvm" SIZE="2147483648" FSTYPE="xfs" MOUNTPOINT="/" PKNAME="nvme0n1p2"
-NAME="nvme0n2" TYPE="disk" SIZE="1099511627776" FSTYPE="" MOUNTPOINT="" PKNAME=""
+NAME="nvme0n2" TYPE="disk" SIZE="1099511627776" FSTYPE="" MOUNTPOINT="" PKNAME="" PTTYPE="gpt"
 NAME="nvme0n2p1" TYPE="part" SIZE="1099000000000" FSTYPE="xfs" MOUNTPOINT="/data" PKNAME="nvme0n2"
 EOF
 }
@@ -2377,6 +2709,59 @@ NAME="sdc" TYPE="disk" SIZE="99999999999" FSTYPE="" MOUNTPOINT="" PKNAME=""
 EOF
 }
 
+fixture_mixed() {
+  cat <<'EOF'
+NAME="sda" TYPE="disk" SIZE="68719476736" FSTYPE="" MOUNTPOINT="" PKNAME=""
+NAME="sda1" TYPE="part" SIZE="1000" FSTYPE="xfs" MOUNTPOINT="/" PKNAME="sda"
+NAME="sdb" TYPE="disk" SIZE="1099511627776" FSTYPE="" MOUNTPOINT="" PKNAME=""
+NAME="sdc" TYPE="disk" SIZE="1099511627776" FSTYPE="" MOUNTPOINT="" PKNAME=""
+NAME="sdc1" TYPE="part" SIZE="1000" FSTYPE="" MOUNTPOINT="" PKNAME="sdc"
+EOF
+}
+
+fixture_signature() {
+  cat <<'EOF'
+NAME="sda" TYPE="disk" SIZE="68719476736" FSTYPE="" MOUNTPOINT="" PKNAME=""
+NAME="sda1" TYPE="part" SIZE="1000" FSTYPE="xfs" MOUNTPOINT="/" PKNAME="sda"
+NAME="sdb" TYPE="disk" SIZE="1099511627776" FSTYPE="xfs" MOUNTPOINT="" PKNAME=""
+NAME="sdc" TYPE="disk" SIZE="1099511627776" FSTYPE="" MOUNTPOINT="" PKNAME="" WIPESIG="LVM2_member"
+EOF
+}
+
+fixture_home() {
+  cat <<'EOF'
+NAME="nvme0n1" TYPE="disk" SIZE="68719476736" FSTYPE="" MOUNTPOINT="" PKNAME=""
+NAME="nvme0n1p1" TYPE="part" SIZE="1000" FSTYPE="xfs" MOUNTPOINT="/" PKNAME="nvme0n1"
+NAME="nvme0n2" TYPE="disk" SIZE="1099511627776" FSTYPE="" MOUNTPOINT="" PKNAME=""
+NAME="nvme0n2p1" TYPE="part" SIZE="1000" FSTYPE="xfs" MOUNTPOINT="/home" PKNAME="nvme0n2"
+NAME="nvme0n3" TYPE="disk" SIZE="1099511627776" FSTYPE="" MOUNTPOINT="" PKNAME=""
+EOF
+}
+
+fixture_whole_root() {
+  cat <<'EOF'
+NAME="nvme0n1" TYPE="disk" SIZE="68719476736" FSTYPE="xfs" MOUNTPOINT="/" PKNAME=""
+NAME="nvme0n2" TYPE="disk" SIZE="1099511627776" FSTYPE="" MOUNTPOINT="" PKNAME=""
+EOF
+}
+
+fixture_unknown() {
+  cat <<'EOF'
+NAME="sdb" TYPE="disk" SIZE="1099511627776" FSTYPE="" MOUNTPOINT="" PKNAME=""
+EOF
+}
+
+fixture_busy() {
+  cat <<'EOF'
+NAME="sda" TYPE="disk" SIZE="68719476736" FSTYPE="" MOUNTPOINT="" PKNAME=""
+NAME="sda1" TYPE="part" SIZE="1000" FSTYPE="xfs" MOUNTPOINT="/" PKNAME="sda"
+NAME="sdb" TYPE="disk" SIZE="1099511627776" FSTYPE="" MOUNTPOINT="" PKNAME="" HOLDERS="dm-0"
+NAME="sdc" TYPE="disk" SIZE="1099511627776" FSTYPE="" MOUNTPOINT="" PKNAME="" FSTAB="yes"
+NAME="sdd" TYPE="disk" SIZE="1099511627776" FSTYPE="" MOUNTPOINT="" PKNAME="" PTTYPE="gpt"
+NAME="sde" TYPE="disk" SIZE="1099511627776" FSTYPE="" MOUNTPOINT="/mnt" PKNAME=""
+EOF
+}
+
 expect_eq() {
   local got=$$1 want=$$2
   if [[ $$got != "$$want" ]]; then
@@ -2393,6 +2778,19 @@ fixture_self_test() {
   expect_eq "$$(ls_field FSTYPE "$$sample")" "LVM2_member"
   expect_eq "$$(ls_field MOUNTPOINT "$$sample")" ""
 
+  got=$$(printf '%s\n' 'offset               type' '----------------------------------------------------------------' '0x1fe                PMBR' '0x200                gpt   [partition table]' '0x0                  xfs   [filesystem]' | parse_wipefs_text)
+  expect_eq "$$got" "PMBR
+gpt
+xfs"
+  got=$$(printf '%s\n' 'gpt' 'LVM2_member' | parse_wipefs_text)
+  expect_eq "$$got" "gpt
+LVM2_member"
+  got=$$(printf '%s\n' 'nvme0n1,offset=0x200,type=gpt,uuid=abc' 'sdb,offset=0x218,type=crypto_LUKS' | parse_wipefs_text)
+  expect_eq "$$got" "gpt
+crypto_LUKS"
+  got=$$(printf '%s\n' 'DEVICE OFFSET TYPE UUID' 'nvme0n1 0x200 gpt abc' | parse_wipefs_text)
+  expect_eq "$$got" "gpt"
+
   use_fixture "$$(fixture_one)"
   expect_eq "$$OS_DISK" "nvme0n1"
   expect_eq "$$(disk_default)" "nvme0n2"
@@ -2400,9 +2798,19 @@ fixture_self_test() {
   reason=$$(data_disk_block_reason nvme0n2)
   expect_eq "$$reason" ""
   reason=$$(data_disk_block_reason /dev/nvme0n1)
-  [[ $$reason == *OS\ disk* ]] || { echo "self-test: OS disk reason [$$reason]" >&2; exit 1; }
+  expect_eq "$$reason" "is a system disk"
   reason=$$(data_disk_block_reason sr0)
-  [[ -n $$reason ]] || { echo "self-test: rom was accepted" >&2; exit 1; }
+  expect_eq "$$reason" "is not a whole disk"
+  got=$$(print_disk_list)
+  [[ $$got == *'system, holds /'* ]] || { echo "self-test: list missed the system disk" >&2; exit 1; }
+  [[ $$got == *'eligible, raw, no partition table, no signature'* ]] || { echo "self-test: list missed the eligible disk" >&2; exit 1; }
+  [[ $$got != *sr0* ]] || { echo "self-test: rom was listed as a disk" >&2; exit 1; }
+  expect_eq "$$(disk_at 2)" "nvme0n2"
+  expect_eq "$$(disk_prompt_label)" "Data disk [2]: "
+  if disk_at 9; then
+    echo "self-test: disk number 9 was accepted" >&2
+    exit 1
+  fi
 
   use_fixture "$$(fixture_none)"
   expect_eq "$$(disk_default)" ""
@@ -2421,12 +2829,80 @@ nvme0n3"
   reason=$$(data_disk_block_reason nvme0n3)
   expect_eq "$$reason" ""
   reason=$$(data_disk_block_reason nvme0n1)
-  [[ $$reason == *OS\ disk* ]] || { echo "self-test: two-disk OS reason [$$reason]" >&2; exit 1; }
+  expect_eq "$$reason" "is a system disk"
+  expect_eq "$$(disk_prompt_label)" "Data disk: "
 
   use_fixture "$$(fixture_boundary)"
-  expect_eq "$$(disk_default)" "sdb"
+  expect_eq "$$(disk_default)" ""
+  reason=$$(data_disk_block_reason sdb)
+  expect_eq "$$reason" ""
+  expect_eq "$$(list_candidates)" "sdb"
   reason=$$(data_disk_block_reason sdc)
   [[ $$reason == *smaller\ than\ 100\ GB* ]] || { echo "self-test: size reason [$$reason]" >&2; exit 1; }
+  expect_eq "$$(disk_prompt_label)" "Data disk: "
+
+  use_fixture "$$(fixture_mixed)"
+  expect_eq "$$(disk_default)" ""
+  reason=$$(data_disk_block_reason sdb)
+  expect_eq "$$reason" ""
+  reason=$$(data_disk_block_reason sdc)
+  [[ $$reason == *'has a partition (sdc1)'* ]] || { echo "self-test: partition reason [$$reason]" >&2; exit 1; }
+
+  use_fixture "$$(fixture_signature)"
+  expect_eq "$$(disk_default)" ""
+  expect_eq "$$(list_candidates)" ""
+  reason=$$(data_disk_block_reason sdb)
+  expect_eq "$$reason" "has a signature"
+  reason=$$(data_disk_block_reason sdc)
+  expect_eq "$$reason" "has a signature"
+
+  use_fixture "$$(fixture_home)"
+  expect_eq "$$OS_DISK" "nvme0n1"
+  expect_eq "$$(disk_default)" ""
+  reason=$$(data_disk_block_reason nvme0n2)
+  expect_eq "$$reason" "is a system disk"
+  reason=$$(data_disk_block_reason nvme0n3)
+  expect_eq "$$reason" ""
+  got=$$(print_disk_list)
+  [[ $$got == *'system, holds /home'* ]] || { echo "self-test: home disk was not marked system" >&2; exit 1; }
+
+  use_fixture "$$(fixture_whole_root)"
+  expect_eq "$$OS_DISK" "nvme0n1"
+  reason=$$(data_disk_block_reason nvme0n1)
+  expect_eq "$$reason" "is a system disk"
+  expect_eq "$$(disk_default)" "nvme0n2"
+
+  use_fixture "$$(fixture_unknown)"
+  expect_eq "$$OS_DISK" ""
+  expect_eq "$$(disk_default)" ""
+  expect_eq "$$(list_candidates)" ""
+  reason=$$(data_disk_block_reason sdb)
+  expect_eq "$$reason" "the system disk was not identified"
+  got=$$(print_disk_list)
+  [[ $$got == *'not eligible, the system disk was not identified'* ]] || { echo "self-test: unknown system disk was eligible" >&2; exit 1; }
+
+  use_fixture "$$(fixture_busy)"
+  expect_eq "$$(disk_default)" ""
+  reason=$$(data_disk_block_reason sdb)
+  expect_eq "$$reason" "has holders"
+  reason=$$(data_disk_block_reason sdc)
+  expect_eq "$$reason" "is named in fstab"
+  reason=$$(data_disk_block_reason sdd)
+  expect_eq "$$reason" "has a partition table"
+  reason=$$(data_disk_block_reason sde)
+  expect_eq "$$reason" "has a mount"
+
+  fstab_line_names_disk sdb "/dev/sdb /data xfs defaults 0 0" || { echo "self-test: fstab missed /dev/sdb" >&2; exit 1; }
+  fstab_line_names_disk sdb "/dev/sdb1 /data xfs defaults 0 0" || { echo "self-test: fstab missed /dev/sdb1" >&2; exit 1; }
+  fstab_line_names_disk nvme0n1 "/dev/nvme0n1p1 /boot xfs defaults 0 0" || { echo "self-test: fstab missed nvme partition" >&2; exit 1; }
+  if fstab_line_names_disk nvme0n1 "/dev/nvme0n10 /data xfs defaults 0 0"; then
+    echo "self-test: nvme0n10 matched nvme0n1" >&2
+    exit 1
+  fi
+  if fstab_line_names_disk sda "/dev/sdaa /data xfs defaults 0 0"; then
+    echo "self-test: sdaa matched sda" >&2
+    exit 1
+  fi
 
   valid_hostname TNMS || { echo "self-test: TNMS rejected" >&2; exit 1; }
   valid_hostname TN || { echo "self-test: TN rejected" >&2; exit 1; }
@@ -2475,10 +2951,17 @@ nvme0n3"
   expect_eq "$$mode" "600"
   grep -q '^CONFIRM=yes$$' "$$dir/out"
   printf '%b\n' '\043 UUID=abc /opt xfs defaults,nofail 0 0' > "$$dir/fstab"
+  printf '%b\n' '\043 /dev/sdb /data xfs defaults 0 0' >> "$$dir/fstab"
+  if fstab_names_disk sdb "$$dir/fstab"; then
+    echo "self-test: a comment named a disk" >&2
+    exit 1
+  fi
   if fstab_has opt abc "$$dir/fstab"; then
     echo "self-test: a comment was treated as an fstab mount" >&2
     exit 1
   fi
+  printf '%s\n' '/dev/sdb1 /data xfs defaults 0 0' >> "$$dir/fstab"
+  fstab_names_disk sdb "$$dir/fstab" || { echo "self-test: fstab file missed sdb" >&2; exit 1; }
   printf '%s\n' 'UUID=abc /opt xfs defaults,nofail 0 0' '/opt/tnms-data /nokia none bind,nofail 0 0' >> "$$dir/fstab"
   fstab_has opt abc "$$dir/fstab"
   fstab_has nokia "" "$$dir/fstab"
@@ -2558,6 +3041,9 @@ help:
 
 	scan only reads. On a terminal it can write /root/tnms-install.answers.
 	Without a terminal it prints the answers to write and exits 2.
+	It lists every whole disk. A default is offered only when the host has
+	one system disk and exactly one other whole disk, and that disk is raw,
+	unsigned, unpartitioned, and at least 100 GB. Otherwise there is no default.
 	prepare records a stamp in /var/lib/tnms-install. disk, check, and status
 	always run. The other stamped targets skip work that is already done.
 	Oracle and the TNMS wizard still run only when the product is absent.

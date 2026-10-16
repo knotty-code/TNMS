@@ -42,7 +42,7 @@ make -C /tmp -f Makefile prepare
 make -C /tmp -f Makefile
 ```
 
-`make scan` only reads. It prints the release, the disks, the hostname, and which of the six install files are in `/tmp`. On a terminal it asks for the data disk, whether to grow `/` and `/tmp`, the short hostname, and the admin group. It asks for an IPv4 address only when detection fails or more than one global address exists. The last question is whether to write `/root/tnms-install.answers` at mode 600. `CONFIRM=yes` is written only after that yes. Declining writes nothing. Without a terminal, scan prints the same report and the lines to put in that file, then exits 2.
+`make scan` only reads. It prints the release, a numbered disk list, the hostname, and which of the six install files are in `/tmp`. On a terminal it asks for the data disk by number or `/dev` name, whether to grow `/` and `/tmp`, the short hostname, and the admin group. It asks for an IPv4 address only when detection fails or more than one global address exists. The last question is whether to write `/root/tnms-install.answers` at mode 600. `CONFIRM=yes` is written only after that yes. Declining writes nothing. Without a terminal, scan prints the same report and the lines to put in that file, then exits 2.
 
 `make prepare` reads that file and applies the disk layout: grow `/` and `/tmp`, partition the named data disk, mount it on `/opt`, bind `/nokia` and `/oradata`, create the 18 GB swap file, write `/etc/fstab`, and restore SELinux labels. It refuses to run without `CONFIRM=yes`. When the layout already matches, it stamps and skips. A later `prepare` leaves an existing `datavg-optlv` partition in place.
 
@@ -70,7 +70,7 @@ Set these on the `make` command line or in `/root/tnms-install.local.mk`. The de
 | `TNMS_HOSTNAME` | `TNMS` | Short hostname |
 | `TNMS_IP` | detected | Server IPv4. Empty uses the same route lookup as the wizard. |
 | `TNMS_ADMIN_GROUP` | `azureuser` | Group on `/opt/tnms-install`, and the SSH account name in the sftp check |
-| `TNMS_DATA_DISK` | chosen by `make scan` | Whole disk that `make prepare` partitions. Recorded in `/root/tnms-install.answers`. |
+| `TNMS_DATA_DISK` | chosen by `make scan` | Eligible whole disk that `make prepare` partitions. Recorded in `/root/tnms-install.answers`. |
 | `TNMS_SID` | `TNMS` | Oracle SID |
 | `SYS_PASSWORD` | `TnZT5hgW8Zwsp79` | Oracle `SYS` |
 | `SYSTEM_PASSWORD` | `TnZT5hgW8Zwsp79` | Oracle `SYSTEM`. Same value as `SYS`. |
@@ -129,14 +129,34 @@ Allow inbound TCP 8444 on the security group in front of the server. The browser
 
 Reads the host and writes no stamp. Fixed product requirements are stated, not asked: `/` at 8 GB, `/tmp` at 16 GB, 18 GB swap, SID `TNMS`, and the paths already in this guide. Passwords stay the variables above. Scan names them and does not prompt, so they do not land in shell history.
 
-The data-disk default is the single whole disk that is not the OS disk, is at least 100 GB, and has no filesystem and no mount. Zero candidates or more than one means there is no default. If `rootvg` does not have room to grow, scan says how much is free and how much is required, and does not offer the grow.
+Scan prints every whole disk. Loop devices and `rom` devices such as `sr0` are left off that list. A disk is eligible only when all of the following are true:
+
+- It is not a system disk. The system set is every disk reached from `/`, `/boot`, `/boot/efi`, `/home`, `/usr`, `/var`, `/tmp`, `/var/log`, or `/var/tmp`. That includes LVM and a filesystem that sits on the whole disk with no partition.
+- It has no partition table and no partitions. An unpartitioned disk is the eligible shape. A GPT or DOS label is not eligible, even when it has no partitions.
+- `lsblk` and a signature probe show no filesystem, LVM, RAID, or LUKS signature. The probe is `wipefs -n`. When `wipefs` is absent, the probe is `blkid`.
+- Nothing is mounted on it, no child is mounted, `/sys/block/<name>/holders` is empty, and `/etc/fstab` does not name it.
+- Its size is at least 100 GB.
+
+If the disk that holds `/` cannot be identified, no disk is eligible and there is no default. Prepare stops before `parted` in that case.
+
+The default exists only for one shape: one system disk, and exactly one other whole disk, and that other disk is eligible. The prompt is `Data disk [2]:` and Enter accepts that number. Any other shape has no default, and the prompt is `Data disk:`. That includes two eligible disks, one eligible disk plus any other non-system disk, and a machine whose only extra disks are partitioned or signed. The operator types a number or a `/dev` name. An ineligible choice is rejected with that disk's reason, and the question repeats.
+
+```text
+disks:
+  1  nvme0n1    64G   system, holds /
+  2  nvme0n2   1.0T   eligible, raw, no partition table, no signature
+  3  sdb        16G   not eligible, is smaller than 100 GB
+Data disk:
+```
+
+If `rootvg` does not have room to grow, scan says how much is free and how much is required, and does not offer the grow.
 
 ### prepare
 
 Applies the agreed layout and writes `/var/lib/tnms-install/prepare`. It will not:
 
-- Partition or label a disk that has a filesystem, a mount, or a child mount, including when the answers name it.
-- Use the OS disk as the data disk.
+- Label a disk that is not eligible, including when the answers file names it. The same checks run again immediately before `parted`.
+- Use a system disk as the data disk.
 - Continue when `/home` is on a terabyte-scale volume. That means the data disk was added to `homelv`.
 - Mount over `/opt` when `/opt` already contains names and is not already `datavg-optlv`.
 - Append a second copy of an `/etc/fstab` line.
