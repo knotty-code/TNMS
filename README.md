@@ -6,7 +6,7 @@ This repository holds the Nokia TNMS 9.1 Linux manual and the procedure for one 
 
 Read these two guides in order.
 
-1. [docs/customer/pre-install.md](docs/customer/pre-install.md). The disk layout for a new VM. The customer applies sections 2 through 4. Section 6 (VS Code) stays manual.
+1. [docs/customer/prepare.md](docs/customer/prepare.md). Grow `/` and `/tmp`, mount the data disk on `/opt`, and create the 18 GiB swap file.
 2. [docs/customer/using-make.md](docs/customer/using-make.md). Copy `Makefile`, `install-tnms-wizard.sh`, `tnms-install.properties.in`, and the three vendor zip files to `/tmp` on the server, then run `make`. The server does not need a clone of this repository.
 
 [docs/customer/install-without-repo.md](docs/customer/install-without-repo.md) describes what each `make` target changes, and the manual GUI path. Follow `using-make.md` for the commands.
@@ -24,4 +24,4 @@ The vendor PDF is [installation_manual_linux.pdf](installation_manual_linux.pdf)
 
 [scripts/Makefile](scripts/Makefile) runs that install. [scripts/install-tnms-wizard.sh](scripts/install-tnms-wizard.sh) replays the Server and Mediation choices without a screen. [scripts/tnms-install.properties.in](scripts/tnms-install.properties.in) is the response file it fills in. The install guide is the place that says when to run them.
 
-[docs/customer/install-log.md](docs/customer/install-log.md) is the ordered record of an earlier install. [docs/customer/TNMS-9.1-RHEL8-install-log.docx](docs/customer/TNMS-9.1-RHEL8-install-log.docx) is the Word copy. [docs/customer/tnms-9.1-linux-install.md](docs/customer/tnms-9.1-linux-install.md) is the same install written against the Nokia manual. [docs/customer/tnmsdemo-undo-swap.md](docs/customer/tnmsdemo-undo-swap.md) is a cleanup for a different host.
+[docs/customer/pre-install.md](docs/customer/pre-install.md) is the longer record of the TNMSv3 starting point, including the VS Code move. [docs/customer/install-log.md](docs/customer/install-log.md) is the ordered record of an earlier install. [docs/customer/TNMS-9.1-RHEL8-install-log.docx](docs/customer/TNMS-9.1-RHEL8-install-log.docx) is the Word copy. [docs/customer/tnms-9.1-linux-install.md](docs/customer/tnms-9.1-linux-install.md) is the same install written against the Nokia manual. [docs/customer/tnmsdemo-undo-swap.md](docs/customer/tnmsdemo-undo-swap.md) is a cleanup for a different host.

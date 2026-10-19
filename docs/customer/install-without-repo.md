@@ -1,8 +1,8 @@
 # TNMS 9.1 on RHEL 8 — install without this repository
 
-Run this on a fresh Red Hat Enterprise Linux 8 server, as root, after the disk layout in [pre-install.md](pre-install.md) is in place. The Makefile checks that layout, then installs Oracle 19c and TNMS 9.1.0.593.0 Server and Mediation.
+Run this on a fresh Red Hat Enterprise Linux 8 server, as root, after the disk layout in [prepare.md](prepare.md) is in place. The Makefile checks that layout, then installs Oracle 19c and TNMS 9.1.0.593.0 Server and Mediation.
 
-[pre-install.md](pre-install.md) sections 2 through 4 build the disk. `make` reads the result and stops when a path is missing or short.
+[prepare.md](prepare.md) grows `/` and `/tmp`, mounts the data disk on `/opt`, and creates the 18 GiB swap file. `make` creates the product directories and the `/nokia` and `/oradata` binds, then stops when the disk or the swap file is missing or short.
 
 One machine. Small Plus. TNMS Server and Mediation together. New database.
 
@@ -116,26 +116,32 @@ Allow inbound TCP 8444 on the security group in front of the server. The browser
 
 ## Targets
 
-`make` runs the targets below. `stage` checks storage before it creates a directory. Each later target checks its own result before it writes its stamp. Run one target with `make -C /opt/tnms-install <target>` after the Makefile is on `/opt`.
+`make` runs the targets below. `stage` checks the data disk, creates the product directories and binds, then checks swap before it copies a file. Each later target checks its own result before it writes its stamp. Run one target with `make -C /opt/tnms-install <target>` after the Makefile is on `/opt`.
 
 ### storage
 
-`make`, `make disk`, and `make status` print the path, the filesystem, the size, and the free space. The install stops when any of these is missing. The message names the path and the requirement. The fix is in [pre-install.md](pre-install.md).
+`make`, `make disk`, and `make status` print the path, the filesystem, the size, and the free space. Before `stage`, `/nokia` and `/oradata` print `missing`. `stage` creates them. The install stops before that when the data disk is missing, and it stops after the directories exist when swap is missing. The message names the path and the requirement. The disk and the swap file are fixed in [prepare.md](prepare.md).
+
+Required before `stage` creates a directory:
 
 - `/opt` is mounted from `/dev/mapper/datavg-optlv`, and that filesystem is at least 100 GB.
-- `/nokia` is the bind from `/opt/tnms-data`. `/oradata` is the bind from `/opt/oradata`.
-- `/opt/swapfile` is the active swap and is exactly 18 GiB.
 - `rootlv` is at least 8 GiB. `tmplv` is at least 16 GiB. `/tmp` is not `noexec`.
 - `/` has at least 4531 MB free before `/opt/nokia/tnms/server` exists.
 - `/home` is not on `datavg` and is under 100 GiB.
-- `/etc/fstab` has the `/opt` line, both binds, and the swap line.
-- `/opt`, `/opt/tnms-data`, and `/opt/oradata` are `usr_t`. `/opt/swapfile` is `swapfile_t`.
+- `/etc/fstab` has the `/opt` line.
 
-`stage` then creates `/opt/oracle`, `/opt/nokia`, `ora1`, `ora2`, `ora3`, and `/opt/tnms-install` when those directories are missing, and it copies the install files onto the mounted volume.
+Required before `stage` copies install files. `stage` creates the first three when they are absent:
+
+- `/nokia` is the bind from `/opt/tnms-data`. `/oradata` is the bind from `/opt/oradata`.
+- `/etc/fstab` has both bind lines.
+- `/opt`, `/opt/tnms-data`, and `/opt/oradata` are `usr_t`.
+- `/opt/swapfile` is the active swap and is exactly 18 GiB, `/etc/fstab` has that line, and the file is `swapfile_t`.
+
+`stage` then copies the install files onto the mounted volume.
 
 ### stage
 
-Creates `/opt/oracle`, `/opt/nokia`, `/opt/tnms-data`, `/opt/oradata/ora1`, `/opt/oradata/ora2`, and `/opt/oradata/ora3` at mode 755, root:root. Creates `/opt/tnms-install` and `/opt/tnms-install/resources` at mode 750, root:`TNMS_ADMIN_GROUP`. Copies the wizard to mode 740 and the properties file and zip files to mode 640. `grep -c @TNMS_IP@` must print 7. The properties file must still set `USER_INSTALL_DIR`, `USER_INSTALL_DIR_TMP`, `USER_DATA_DIR`, `ORACLE_INSTALL_DIR`, and `ORACLE_DATA_DIR`.
+Creates `/opt/oracle`, `/opt/nokia`, `/opt/tnms-data`, `/opt/oradata/ora1`, `/opt/oradata/ora2`, and `/opt/oradata/ora3` at mode 755, root:root. Bind-mounts `/opt/tnms-data` on `/nokia` and `/opt/oradata` on `/oradata`, and appends those lines to `/etc/fstab` when they are absent. A `/nokia` or `/oradata` that already holds files and is not a mount stops the target. The target does not cover that directory. Creates `/opt/tnms-install` and `/opt/tnms-install/resources` at mode 750, root:`TNMS_ADMIN_GROUP`. Copies the wizard to mode 740 and the properties file and zip files to mode 640. `grep -c @TNMS_IP@` must print 7. The properties file must still set `USER_INSTALL_DIR`, `USER_INSTALL_DIR_TMP`, `USER_DATA_DIR`, `ORACLE_INSTALL_DIR`, and `ORACLE_DATA_DIR`.
 
 `restorecon` runs on those `/opt` directories. It does not run on the `/nokia` or `/oradata` bind mounts.
 

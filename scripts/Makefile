@@ -1,7 +1,8 @@
 # TNMS 9.1 install without this repository.
 # Copy this file to /tmp with the wizard, the properties file, and the three zip files.
 # The shell program is in LIB. Site values are exported into that program.
-# The customer builds the disk layout. make checks it, then installs TNMS.
+# The customer mounts the 1 TB disk and creates the 18 GiB swap file.
+# stage creates the product directories and the /nokia and /oradata binds.
 
 SHELL := /bin/bash
 .ONESHELL:
@@ -775,12 +776,83 @@ wait_for_service() {
   return 1
 }
 
+dir_not_hiding() {
+  local path=$$1
+  [[ -e "$$path" ]] || return 0
+  if [[ ! -d "$$path" ]]; then
+    echo "dirs: $$path exists and is not a directory" >&2
+    return 1
+  fi
+  if findmnt -n "$$path" >/dev/null; then
+    return 0
+  fi
+  if find "$$path" -mindepth 1 -print -quit | grep -q .; then
+    echo "dirs: $$path is not a mount and is not empty. It was not covered with a bind." >&2
+    return 1
+  fi
+}
+
+ensure_bind() {
+  local src=$$1 dest=$$2 kind=$$3 src_now
+  install -d -o root -g root -m 755 "$$src"
+  dir_not_hiding "$$dest" || return 1
+  if findmnt -n "$$dest" >/dev/null; then
+    on_data_disk "$$dest" || { echo "dirs: $$dest is not on the /opt volume" >&2; return 1; }
+  else
+    install -d -o root -g root -m 755 "$$dest"
+    echo "dirs: mount --bind $$src $$dest"
+    mount --bind "$$src" "$$dest"
+  fi
+  src_now=$$(findmnt -n -o SOURCE "$$dest" 2>/dev/null || true)
+  if [[ "$$kind" == nokia && "$$src_now" != *"[/tnms-data]"* ]]; then
+    echo "dirs: $$dest source is '$${src_now:-empty}'" >&2
+    return 1
+  fi
+  if [[ "$$kind" == oradata && "$$src_now" != *"[/oradata]"* ]]; then
+    echo "dirs: $$dest source is '$${src_now:-empty}'" >&2
+    return 1
+  fi
+  if ! fstab_has "$$kind" ""; then
+    echo "dirs: appending $$src $$dest to /etc/fstab"
+    printf '%s %s none bind,nofail 0 0\n' "$$src" "$$dest" >> /etc/fstab
+    FSTAB_CHANGED=1
+  fi
+}
+
+ensure_dirs() {
+  local rc=0
+  FSTAB_CHANGED=0
+  echo "dirs: /opt/oracle /opt/nokia /opt/tnms-data /opt/oradata"
+  install -d -o root -g root -m 755 /opt/oracle /opt/nokia /opt/tnms-data
+  install -d -o root -g root -m 755 /opt/oradata/ora1 /opt/oradata/ora2 /opt/oradata/ora3
+  ensure_bind /opt/tnms-data /nokia nokia || rc=1
+  if [[ "$$rc" -eq 0 ]]; then
+    ensure_bind /opt/oradata /oradata oradata || rc=1
+  fi
+  if [[ "$$FSTAB_CHANGED" -eq 1 ]]; then
+    systemctl daemon-reload
+  fi
+  [[ "$$rc" -eq 0 ]] || return 1
+  echo "dirs: restorecon /opt /opt/oracle /opt/nokia /opt/tnms-data /opt/oradata"
+  restorecon -F /opt /opt/oracle /opt/nokia
+  restorecon -RF /opt/tnms-data /opt/oradata
+  if [[ -f /opt/swapfile ]]; then
+    chcon -t swapfile_t /opt/swapfile
+  fi
+  echo "dirs: done"
+}
+
 stage_main() {
   require_root
   preflight_ok || exit 1
   print_storage
+  if ! storage_base_ok; then
+    echo "storage: the data disk is not ready. Finish prepare.md, including the /opt line in /etc/fstab. No directory was created." >&2
+    exit 1
+  fi
+  ensure_dirs || exit 1
   if ! storage_ok; then
-    echo "storage: the layout is not ready. Finish pre-install.md. No directory was created." >&2
+    echo "storage: product directories and binds are in place. Finish the swap file in prepare.md. No install file was copied." >&2
     exit 1
   fi
   if layout_ok; then
@@ -1110,6 +1182,13 @@ self_test() {
     exit 1
   fi
   home_is_huge "$$HOME_HUGE" || { echo "self-test: huge home was accepted" >&2; exit 1; }
+  mkdir -p "$$dir/empty" "$$dir/full"
+  touch "$$dir/full/x"
+  dir_not_hiding "$$dir/empty"
+  if dir_not_hiding "$$dir/full" 2>/dev/null; then
+    echo "self-test: a non-empty directory was accepted for a bind" >&2
+    exit 1
+  fi
   rm -rf "$$dir"
   echo "self-test: ok"
 }
@@ -1144,7 +1223,9 @@ labels_ok() {
   context_has /opt usr_t || return 1
   context_has /opt/tnms-data usr_t || return 1
   context_has /opt/oradata usr_t || return 1
-  context_has /opt/swapfile swapfile_t || return 1
+  if [[ -f /opt/swapfile ]]; then
+    context_has /opt/swapfile swapfile_t || return 1
+  fi
 }
 
 fstab_has() {
@@ -1185,7 +1266,7 @@ print_storage() {
   fi
 }
 
-storage_ok() {
+storage_base_ok() {
   local bad=0 src bytes root_b tmp_b home_b opts uuid
   src=$$(findmnt -n -o SOURCE /opt 2>/dev/null || true)
   if [[ $$src != /dev/mapper/datavg-optlv ]]; then
@@ -1195,20 +1276,6 @@ storage_ok() {
   bytes=$$(df -B1 --output=size /opt 2>/dev/null | tail -n 1 | tr -d ' ' || true)
   if [[ ! $$bytes =~ ^[0-9]+$$ || $$bytes -lt $$MIN_DATA ]]; then
     echo "storage: /opt is $${bytes:-unknown} bytes. Required at least 100 GB." >&2
-    bad=1
-  fi
-  src=$$(findmnt -n -o SOURCE /nokia 2>/dev/null || true)
-  if [[ $$src != *"[/tnms-data]"* ]]; then
-    echo "storage: /nokia source is '$${src:-empty}'. Required the bind from /opt/tnms-data." >&2
-    bad=1
-  fi
-  src=$$(findmnt -n -o SOURCE /oradata 2>/dev/null || true)
-  if [[ $$src != *"[/oradata]"* ]]; then
-    echo "storage: /oradata source is '$${src:-empty}'. Required the bind from /opt/oradata." >&2
-    bad=1
-  fi
-  if ! swap_is_ready; then
-    echo "storage: /opt/swapfile is not an $${SWAP_BYTES}-byte swap." >&2
     bad=1
   fi
   root_b=$$(lv_bytes /dev/rootvg/rootlv || true)
@@ -1248,6 +1315,30 @@ storage_ok() {
     echo "storage: /etc/fstab has no /opt line for datavg." >&2
     bad=1
   fi
+  return "$$bad"
+}
+
+storage_ok() {
+  local bad=0 src uuid
+  storage_base_ok || bad=1
+  if [[ "$$bad" -ne 0 ]]; then
+    return 1
+  fi
+  src=$$(findmnt -n -o SOURCE /nokia 2>/dev/null || true)
+  if [[ $$src != *"[/tnms-data]"* ]]; then
+    echo "storage: /nokia source is '$${src:-empty}'. Required the bind from /opt/tnms-data." >&2
+    bad=1
+  fi
+  src=$$(findmnt -n -o SOURCE /oradata 2>/dev/null || true)
+  if [[ $$src != *"[/oradata]"* ]]; then
+    echo "storage: /oradata source is '$${src:-empty}'. Required the bind from /opt/oradata." >&2
+    bad=1
+  fi
+  if ! swap_is_ready; then
+    echo "storage: /opt/swapfile is not an $${SWAP_BYTES}-byte swap." >&2
+    bad=1
+  fi
+  uuid=$$(blkid -s UUID -o value /dev/datavg/optlv 2>/dev/null || true)
   if ! fstab_has nokia "$$uuid"; then
     echo "storage: /etc/fstab has no /nokia bind." >&2
     bad=1
@@ -1299,7 +1390,7 @@ all: check
 
 help:
 	cat <<-'EOF'
-	TNMS 9.1 install. Run as root after pre-install.md sections 2 through 4.
+	TNMS 9.1 install. Run as root after prepare.md.
 
 	  dnf -y install make
 	  make -C /tmp -f Makefile
@@ -1312,11 +1403,13 @@ help:
 	Install targets:
 	  stage host packages kernel disk unpack credentials oracle wizard lsmem sftp sudo service check
 
-	make reads the mounted layout and stops before it creates a directory
-	when /opt, /nokia, /oradata, swap, /tmp, or / is short. The customer
-	builds that layout. Stamps live in /var/lib/tnms-install. disk, check,
-	and status always run. The other stamped targets skip work that is
-	already done. Oracle and the TNMS wizard still run only when the
+	stage creates /opt/tnms-data, /opt/oradata, the ora directories, and the
+	/nokia and /oradata binds when /opt is the 1 TB datavg volume. It stops
+	before creating a directory when that volume, /tmp, or / is not ready.
+	It creates the directories and then stops before copying install files
+	when the 18 GiB swap file is missing. Stamps live in /var/lib/tnms-install.
+	disk, check, and status always run. The other stamped targets skip work
+	that is already done. Oracle and the TNMS wizard still run only when the
 	product is absent.
 
 	Overrides (command line or /root/tnms-install.local.mk):

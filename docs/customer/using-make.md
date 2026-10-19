@@ -1,6 +1,6 @@
 # TNMS 9.1 on RHEL 8 — install with make
 
-Run this page after [pre-install.md](pre-install.md) sections 2 through 4. Those sections build the disk. This page copies six files to the server and runs `make`. `make` checks the disk, then installs Oracle 19c and TNMS 9.1.0.593.0 Server and Mediation on one Small Plus machine.
+Run this page after [prepare.md](prepare.md). That page grows `/` and `/tmp`, mounts the data disk on `/opt`, and creates the 18 GiB swap file. This page copies six files to the server and runs `make`. `make` creates the product directories and the `/nokia` and `/oradata` binds, then installs Oracle 19c and TNMS 9.1.0.593.0 Server and Mediation on one Small Plus machine.
 
 Copy the six files onto the server. A clone of this repository is not required there. `/home` is about 1 GB, so the files go to `/tmp`, then `make` moves them onto the 1 TB volume.
 
@@ -10,37 +10,32 @@ Run the commands as root from section 4 on. The prompt ends with `#`. A line tha
 
 ## 1. Confirm the disk
 
-`make` stops before it creates a directory when this layout is missing. The fix is in [pre-install.md](pre-install.md) sections 2 through 4. Finish those sections, then return here.
+`make` creates `/opt/tnms-data`, `/opt/oradata`, `/opt/oracle`, `/opt/nokia`, `ora1`, `ora2`, `ora3`, and the `/nokia` and `/oradata` binds. Those paths are absent here. `make` stops before creating them when `/opt` is not the data volume, and it stops again before copying install files when the swap file is missing. The fix is [prepare.md](prepare.md).
 
 **Confirm by running:**
 
 ```bash
-for p in / /home /opt /nokia /oradata /tmp; do findmnt -n -o SOURCE,FSTYPE,TARGET "$p"; done
+for p in / /home /opt /tmp; do findmnt -n -o SOURCE,FSTYPE,TARGET "$p"; done
 swapon --show
-stat -c '%C %n' /opt /opt/tnms-data /opt/oradata /opt/swapfile
-grep -E '^[^#].*(/opt|/nokia|/oradata|swapfile)' /etc/fstab
+grep -E '^[^#].*([[:space:]]/opt[[:space:]]|swapfile)' /etc/fstab
 ```
 
 **Expected output:**
 
-`/` , `/home`, and `/tmp` are `rootvg` volumes. `/opt` is `/dev/mapper/datavg-optlv`. `/nokia` and `/oradata` show that device with the directory in brackets. Swap is `/opt/swapfile` at 18G. The four paths are `usr_t`, except `/opt/swapfile`, which is `swapfile_t`. `/etc/fstab` has the `/opt` line, both binds, and the swap line.
+`/` , `/home`, and `/tmp` are `rootvg` volumes. `/opt` is `/dev/mapper/datavg-optlv`. Swap is `/opt/swapfile` at 18G. `/etc/fstab` has the `/opt` line and the swap line. `/nokia` and `/oradata` are not in this output.
 
 ```text
 /dev/mapper/rootvg-rootlv xfs    /
 /dev/mapper/rootvg-homelv xfs    /home
 /dev/mapper/datavg-optlv  xfs    /opt
-/dev/mapper/datavg-optlv[/tnms-data] xfs    /nokia
-/dev/mapper/datavg-optlv[/oradata] xfs    /oradata
 /dev/mapper/rootvg-tmplv  xfs    /tmp
 NAME          TYPE SIZE USED PRIO
 /opt/swapfile file  18G   0B   -2
-system_u:object_r:usr_t:s0 /opt
-system_u:object_r:usr_t:s0 /opt/tnms-data
-system_u:object_r:usr_t:s0 /opt/oradata
-system_u:object_r:swapfile_t:s0 /opt/swapfile
+UUID=<uuid> /opt xfs defaults,nofail 0 0
+/opt/swapfile none swap sw,nofail 0 0
 ```
 
-An empty line for `/nokia` or `/oradata` means stop. `make` will refuse the same layout, and it will not partition a disk for you.
+`/opt` on `rootvg-rootlv`, or no swap line, means stop. `make` does not partition a disk and does not create the swap file.
 
 **Confirm by running:**
 
@@ -141,7 +136,7 @@ make -C /tmp -f Makefile help
 The first line is:
 
 ```text
-TNMS 9.1 install. Run as root after pre-install.md sections 2 through 4.
+TNMS 9.1 install. Run as root after prepare.md.
 ```
 
 The install targets listed are `stage host packages kernel disk unpack credentials oracle wizard lsmem sftp sudo service check`.
@@ -194,8 +189,8 @@ storage:
   /tmp       /dev/mapper/rootvg-tmplv                      16G      16G free
   /home      /dev/mapper/rootvg-homelv                   1014M     941M free
   /opt       /dev/mapper/datavg-optlv                     1.0T    1017G free
-  /nokia     /dev/mapper/datavg-optlv[/tnms-data]         1.0T    1017G free
-  /oradata   /dev/mapper/datavg-optlv[/oradata]           1.0T    1017G free
+  /nokia     missing                                  unknown  unknown free
+  /oradata   missing                                  unknown  unknown free
   swap       /opt/swapfile                                 18G
 preflight        ok
 stage            MISSING
@@ -208,8 +203,10 @@ The free column moves. `makefile` prints `not-installed` until `stage` copies th
 Stop when any of these is true:
 
 - `/opt` is not `/dev/mapper/datavg-optlv`, or its size is under 100 GB.
-- `/nokia`, `/oradata`, or `swap` prints `missing`.
+- `swap` prints `missing`. Finish the swap file in [prepare.md](prepare.md).
 - `preflight` prints `MISSING`. Read the line above it. The usual causes are a shell that is not root, a missing `TNMS_ADMIN_GROUP`, SELinux not `Enforcing`, or a system that is not Red Hat Enterprise Linux 8.
+
+`/nokia` and `/oradata` print `missing` until `stage` creates the binds. That is expected in this report.
 
 `MISSING` on `stage`, `host`, `packages`, `kernel`, `unpack`, `credentials`, `oracle`, `wizard`, `lsmem`, `sftp`, `sudo`, or `service` is expected here. Those are the steps the next command runs.
 
@@ -245,7 +242,9 @@ Headings mark each target:
 === check ===
 ```
 
-`stage` ends with `stage: done`. The wizard script and the properties file are in `/opt/tnms-install`. The three zip files are in `/opt/tnms-install/resources`. `/opt/tnms-install/Makefile` is the file later commands use.
+`stage` prints `dirs: done` after it creates the directories and the binds. It ends with `stage: done`. The wizard script and the properties file are in `/opt/tnms-install`. The three zip files are in `/opt/tnms-install/resources`. `/opt/tnms-install/Makefile` is the file later commands use.
+
+A stop that says `Finish the swap file in prepare.md. No install file was copied.` means the directories and binds are already in place. Finish the swap file, then run `make -C /tmp -f Makefile` again. The `/tmp` copies are still there.
 
 `oracle` may print `Error checking requirements.` on a 16 GB server. The memory check wants 32 GB, and silent mode continues. The target ends with `oracle: done`.
 

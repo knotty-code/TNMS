@@ -1,5 +1,7 @@
 # TNMS 9.1 on RHEL 8 — pre-install for a new VM
 
+Customers preparing a new server should follow [prepare.md](prepare.md). This page is the record of the TNMSv3 starting point and the longer notes. Section 6 is the VS Code move.
+
 ## Starting point — TNMSv3, 2026-10-09
 
 This is the VM the procedure below starts from. The figures were read over SSH at 2026-10-09 14:05 UTC, about seven minutes after boot. `cloud-init status` was `done`. Sections 2 through 6 have not been applied. The layout matches the new-image sizes in section 1: `rootlv` and `tmplv` are 2 GB, and `homelv` is 1 GB.
@@ -68,7 +70,7 @@ Section 2 grows `rootlv` to 8 GB and `tmplv` to 16 GB. Both are 2 GB. `/` has 2.
 
 Section 3 uses `DATA_DISK=/dev/nvme0n2`. That disk is empty.
 
-Section 4 creates the product directories, the `/nokia` and `/oradata` bind mounts, and the 18 GB swap file, then appends them to `/etc/fstab`.
+Section 4 creates the 18 GB swap file and records `/opt` and that file in `/etc/fstab`. `make` creates the product directories and the `/nokia` and `/oradata` binds.
 
 Section 5 is the check after those steps. Section 6 applies before VS Code Remote SSH. `/home` is 1014M, and `/home/azureuser/.vscode-server` is absent.
 
@@ -310,17 +312,11 @@ One line. `SOURCE` is `/dev/mapper/datavg-optlv` and `SIZE` is `1023.4G` on this
 
 Empty output means `/opt` is not a mount. `/opt` is still a directory on the 8 GB root filesystem. Stop and repeat the `mount` command. Section 4 writes an 18 GB file under `/opt`.
 
-## 4. Directories, data binds, and swap
+## 4. Swap
 
-```bash
-install -d -m 755 /opt/oracle /opt/nokia /opt/tnms-data /nokia /oradata
-install -d -m 755 /opt/oradata/ora1 /opt/oradata/ora2 /opt/oradata/ora3
-install -d -o root -g azureuser -m 750 /opt/tnms-install /opt/tnms-install/resources
-mount --bind /opt/tnms-data /nokia
-mount --bind /opt/oradata /oradata
-```
+`make` creates `/opt/oracle`, `/opt/nokia`, `/opt/tnms-data`, `/opt/oradata` with `ora1`, `ora2`, and `ora3`, and the bind mounts `/nokia` and `/oradata`. It also appends those two binds to `/etc/fstab` and sets their SELinux types. Leave that work for [using-make.md](using-make.md).
 
-Those commands print nothing. `/opt/tnms-install` is mode `750` and group `azureuser`, so that SSH login can read the wizard files. The plaintext database passwords, the generated response file, and the wizard log stay in `/root` at mode `600`.
+This section creates the 18 GB swap file on the 1 TB volume. `/opt/tnms-install` is created later by `make`, mode `750`, group `azureuser`.
 
 **Confirm by running:**
 
@@ -371,42 +367,34 @@ printf '%s\n' "$OPT_UUID"
 
 One line, a UUID with hyphens. `blkid: error:` or an empty line means `/dev/datavg/optlv` does not exist. Stop. Leave `/etc/fstab` unchanged and return to section 3.
 
-Write `/etc/fstab` with that UUID. `nofail` lets the VM boot when the data disk is absent. The checks in the next section catch a missing mount before the install. Append these lines only after the UUID check printed a value. An empty `UUID=` line is skipped by `mount -a` because of `nofail`, and that command still prints nothing.
+Record `/opt` and the swap file in `/etc/fstab`. `nofail` lets the VM boot when the data disk is absent. Append a line only when it is not already there. The `/nokia` and `/oradata` lines are written by `make`.
 
 ```bash
-cat >> /etc/fstab << EOF
-UUID=${OPT_UUID} /opt xfs defaults,nofail 0 0
-/opt/tnms-data /nokia none bind,nofail 0 0
-/opt/oradata /oradata none bind,nofail 0 0
-/opt/swapfile none swap sw,nofail 0 0
-EOF
+grep -qE '^[^#].*[[:space:]]/opt[[:space:]]' /etc/fstab || printf '%s\n' "UUID=${OPT_UUID} /opt xfs defaults,nofail 0 0" >> /etc/fstab
+grep -qE '^[^#].*swapfile' /etc/fstab || printf '%s\n' "/opt/swapfile none swap sw,nofail 0 0" >> /etc/fstab
 systemctl daemon-reload
-mount -a
+swapon -a
 ```
 
-`cat`, `systemctl`, and `mount` print nothing.
+Those commands print nothing when the lines are already present. `swapon` prints nothing when `/opt/swapfile` is already active.
 
 ```bash
-restorecon -RF /opt
+restorecon -F /opt
 chcon -t swapfile_t /opt/swapfile
 ```
 
-`restorecon` prints a line for each file it relabels. On this disk the fresh filesystem root is `unlabeled_t`, and `/opt/tnms-data` and `/opt/oradata` are `default_t`. The command moves those to `usr_t`. `chcon` prints nothing.
-
-`/nokia` and `/oradata` are the same inodes as `/opt/tnms-data` and `/opt/oradata`. `restorecon` on `/nokia` or `/oradata` applies `default_t` and overwrites `usr_t`. Leave those two paths out of `restorecon`. `restorecon -RF /opt` also labels `/opt/swapfile` as `usr_t`. The `chcon` puts `swapfile_t` back. That is the type `swapon` set when the file was activated.
+`restorecon` prints a line when it relabels `/opt`. A fresh filesystem root is `unlabeled_t`. This command sets that directory to `usr_t`. It does not walk the files under `/opt`. `chcon` prints nothing. `swapon` already set `swapfile_t` on the swap file. `chcon` puts that type back if a later relabel changed it.
 
 **Confirm by running:**
 
 ```bash
-stat -c '%C %n' /opt /opt/tnms-data /opt/oradata /opt/swapfile
+stat -c '%C %n' /opt /opt/swapfile
 ```
 
 **Expected output:**
 
 ```text
 system_u:object_r:usr_t:s0 /opt
-system_u:object_r:usr_t:s0 /opt/tnms-data
-system_u:object_r:usr_t:s0 /opt/oradata
 system_u:object_r:swapfile_t:s0 /opt/swapfile
 ```
 
@@ -415,31 +403,29 @@ system_u:object_r:swapfile_t:s0 /opt/swapfile
 **Confirm by running:**
 
 ```bash
-for p in / /home /opt /nokia /oradata /tmp; do findmnt -n -o SOURCE,FSTYPE,TARGET "$p"; done
+for p in / /home /opt /tmp; do findmnt -n -o SOURCE,FSTYPE,TARGET "$p"; done
 ```
 
 **Expected output:**
 
-`/` and `/home` and `/tmp` are `rootvg` volumes. `/opt` is `/dev/mapper/datavg-optlv`. `/nokia` and `/oradata` show that device with the directory in brackets. The lines look like this. Volume names follow the VM.
+`/` and `/home` and `/tmp` are `rootvg` volumes. `/opt` is `/dev/mapper/datavg-optlv`. `/nokia` and `/oradata` are absent until `make` creates them. The lines look like this. Volume names follow the VM.
 
 ```text
 /dev/mapper/rootvg-rootlv xfs    /
 /dev/mapper/rootvg-homelv xfs    /home
 /dev/mapper/datavg-optlv  xfs    /opt
-/dev/mapper/datavg-optlv[/tnms-data] xfs    /nokia
-/dev/mapper/datavg-optlv[/oradata] xfs    /oradata
 /dev/mapper/rootvg-tmplv  xfs    /tmp
 ```
 
 **Confirm by running:**
 
 ```bash
-df -h / /home /opt /opt/oracle /opt/nokia /opt/tnms-install
+df -h / /home /opt
 ```
 
 **Expected output:**
 
-`/home` is about 1G. `/opt`, `/opt/oracle`, `/opt/nokia`, and `/opt/tnms-install` are the 1 TB volume. `/` has several GB free.
+`/home` is about 1G. `/opt` is the 1 TB volume. `/` has several GB free.
 
 **Confirm by running:**
 
@@ -468,20 +454,7 @@ getenforce
 Enforcing
 ```
 
-**Confirm by running:**
-
-```bash
-stat -c '%a %U %G %n' /opt/tnms-install /opt/tnms-install/resources
-```
-
-**Expected output:**
-
-```text
-750 root azureuser /opt/tnms-install
-750 root azureuser /opt/tnms-install/resources
-```
-
-Reboot, log in again, and run the five checks in this section a second time. The same mounts and the same swap file mean `/etc/fstab` is in effect.
+Reboot, log in again, and run the checks in this section a second time. The same `/opt` mount and the same swap file mean `/etc/fstab` is in effect. `/nokia` and `/oradata` appear after `make` runs.
 
 ## 6. VS Code Remote SSH
 
