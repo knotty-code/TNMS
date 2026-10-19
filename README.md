@@ -7,11 +7,13 @@ This repository holds the Nokia TNMS 9.1 Linux manual and the procedure for one 
 Read these two guides in order.
 
 1. [docs/customer/pre-install.md](docs/customer/pre-install.md). The disk layout for a new VM. The customer applies sections 2 through 4. Section 6 (VS Code) stays manual.
-2. [docs/customer/install-without-repo.md](docs/customer/install-without-repo.md). Install Oracle 19c and TNMS on a server that does not have this repository. Copy `scripts/Makefile`, `scripts/install-tnms-wizard.sh`, `scripts/tnms-install.properties.in`, and the three vendor zip files to `/tmp` on that server. As root, install `make`, then run `make`.
+2. [docs/customer/using-make.md](docs/customer/using-make.md). Copy `Makefile`, `install-tnms-wizard.sh`, `tnms-install.properties.in`, and the three vendor zip files to `/tmp` on the server, then run `make`. The server does not need a clone of this repository.
+
+[docs/customer/install-without-repo.md](docs/customer/install-without-repo.md) describes what each `make` target changes, and the manual GUI path. Follow `using-make.md` for the commands.
 
 The Oracle and TNMS zip files are not in this repository.
 
-Each of those guides has a Word copy in the same directory:
+`pre-install.md` and `install-without-repo.md` have Word copies in the same directory:
 
 - [docs/customer/TNMS-9.1-RHEL8-pre-install.docx](docs/customer/TNMS-9.1-RHEL8-pre-install.docx)
 - [docs/customer/TNMS-9.1-RHEL8-install-without-repo.docx](docs/customer/TNMS-9.1-RHEL8-install-without-repo.docx)

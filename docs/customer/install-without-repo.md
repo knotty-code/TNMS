@@ -6,7 +6,7 @@ Run this on a fresh Red Hat Enterprise Linux 8 server, as root, after the disk l
 
 One machine. Small Plus. TNMS Server and Mediation together. New database.
 
-The procedure is [scripts/Makefile](../../scripts/Makefile). The server does not need this git repository. Copy the Makefile to the server with the wizard files and run it there.
+The procedure is [scripts/Makefile](../../scripts/Makefile). The server does not need this git repository. The commands, in order, are in [using-make.md](using-make.md). This page describes what each target changes.
 
 Names and addresses below are this host. Replace them with the site values by setting the variables in the next section. Sizes move with the disk.
 
