@@ -9,7 +9,7 @@ Read these two guides in order.
 1. [docs/customer/prepare.md](docs/customer/prepare.md). Grow `/` and `/tmp`, mount the data disk on `/opt`, and create the 18 GiB swap file.
 2. [docs/customer/using-make.md](docs/customer/using-make.md). Copy `Makefile`, `install-tnms-wizard.sh`, `tnms-install.properties.in`, and the three vendor zip files to `/tmp` on the server, then run `make`. The server does not need a clone of this repository.
 
-[docs/customer/install-without-repo.md](docs/customer/install-without-repo.md) describes what each `make` target changes, and the manual GUI path. Follow `using-make.md` for the commands.
+[docs/customer/install-without-repo.md](docs/customer/install-without-repo.md) describes what each `make` target changes, and the manual GUI path. Follow `using-make.md` for the commands. [docs/customer/tnms-install-properties.md](docs/customer/tnms-install-properties.md) explains each line in `tnms-install.properties.in`. Review that file in step 5 of `using-make.md` before the first `make`.
 
 The Oracle and TNMS zip files are not in this repository.
 

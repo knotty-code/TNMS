@@ -76,7 +76,7 @@ A command line or `/root/tnms-install.local.mk` sets the hostname, address, and 
 
 Password rule used for `SYS`, `SYSTEM`, and `tnmsdba`: 6 to 30 characters from `a-z`, `A-Z`, `0-9`, and `+ - _ { }`. `tnmsdba` is a different value from `SYS`. The SFTP password is separate again.
 
-`make` writes the database passwords into `/root/tnms-db-credentials` at mode 600. If that file already exists and a password differs, `make` stops and leaves the file in place. Leave `tnms-install.properties.in` unchanged. The wizard writes the server IPv4 into a separate response file, `/root/tnms-install.properties`.
+`make` writes the database passwords into `/root/tnms-db-credentials` at mode 600. If that file already exists and a password differs, `make` stops and leaves the file in place. Review `tnms-install.properties.in` before the first `make`. Each attribute is explained in [tnms-install-properties.md](tnms-install-properties.md). The wizard writes the server IPv4 into a separate response file, `/root/tnms-install.properties`.
 
 ## TNMS client login
 

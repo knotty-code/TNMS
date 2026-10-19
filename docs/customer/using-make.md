@@ -60,7 +60,7 @@ Use one directory on the workstation. These are the file names `make` looks for.
 
 On a workstation that has this repository, the three small files are `scripts/Makefile`, `scripts/install-tnms-wizard.sh`, and `scripts/tnms-install.properties.in`. Copy those three into the directory with the zip files. The zip files are not in the repository.
 
-Leave `tnms-install.properties.in` unchanged. It still contains seven `@TNMS_IP@` placeholders. The wizard fills those on the server.
+Open `tnms-install.properties.in` and review each attribute before the first `make`. [tnms-install-properties.md](tnms-install-properties.md) explains every line. The file must still contain seven `@TNMS_IP@` placeholders when you copy it. The wizard fills those on the server.
 
 ## 3. Copy the six files to `/tmp`
 
@@ -143,7 +143,9 @@ The install targets listed are `stage host packages kernel disk unpack credentia
 
 ## 5. Set site values before the first run
 
-The defaults apply when you do not set them.
+Open `/tmp/tnms-install.properties.in` and read each attribute before the first `make`. [tnms-install-properties.md](tnms-install-properties.md) says what each line does and which lines are fixed. The delivered file is a new Small Plus install of Server and Mediation. It selects Ethernet Manager, ASON Manager, Optical Manager, and Optical Spectrum Insight, and Generic SNMP as the only network element. Change a site choice in this file now. After `stage`, the wizard reads `/opt/tnms-install/tnms-install.properties.in`.
+
+The Makefile has a second set of site values. The defaults apply when you do not set them.
 
 | Variable | Default | Role |
 | --- | --- | --- |
