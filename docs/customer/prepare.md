@@ -2,9 +2,36 @@
 
 Do this before [using-make.md](using-make.md). The server does not need a clone of this repository.
 
-One Small Plus machine. TNMS Server and Mediation together. The image is Red Hat Enterprise Linux 8, SELinux is Enforcing, and the SSH user can open a root shell with `sudo -i`. On this image that user is `azureuser`, and that group is the `make` default for `TNMS_ADMIN_GROUP`. `make` installs packages, sets the hostname, and creates the product directories. This page grows `/` and `/tmp`, mounts the data disk on `/opt`, and creates the swap file.
+TNMS Server and Mediation go on one machine. Pick the tier in the next section before you order the VM. The image is Red Hat Enterprise Linux 8, SELinux is Enforcing, and the SSH user can open a root shell with `sudo -i`. On this image that user is `azureuser`, and that group is the `make` default for `TNMS_ADMIN_GROUP`. `make` installs packages, sets the hostname, and creates the product directories. This page grows `/` and `/tmp`, mounts the data disk on `/opt`, and creates the swap file that `make` checks.
 
 Run the commands as root. The prompt ends with `#`.
+
+## Choose a scale
+
+Order the VM from Nokia's tiers. CPU, RAM, and disks are [Table 3](../nokia-imn/02-preparation.md#23-hardware-requirements). Filesystem sizes, including swap, are [Table 8](../nokia-imn/03-os-configuration.md#32-disk-configuration). When Server and Mediation share a machine, swap is at least half the RAM ([Swap Configuration](../nokia-imn/04-initial-system-configuration.md#483-swap-configuration)). Table 8 is larger than that floor. Create the Table 8 size.
+
+| | Small | Small Plus | Medium | Large |
+| --- | --- | --- | --- | --- |
+| vCPU | 16 | 32 | 64 | 160 |
+| RAM | 16 GB | 32 GB | 64 GB | 256 GB |
+| Swap | 60 GB | 100 GB | 100 GB | 130 GB |
+| `/` | 940 GB | 150 GB | 150 GB | 170 GB |
+| `/tmp` | — | 50 GB | 50 GB | 60 GB |
+| `/oradata/ora1` | — | 300 GB | 700 GB | 600 GB |
+| `/oradata/ora2` | — | 300 GB | 500 GB | 2500 GB |
+| `/oradata/ora3` | — | 150 GB | 250 GB | 1500 GB |
+| `/nokia` | — | 150 GB | 250 GB | 800 GB |
+| Disks, no RAID | 1x 1 TB HDD | 2x 600 GB SSD | 2x 1 TB SSD | 1x 960 GB SSD + 3x 1.2 TB SSD |
+
+Small's `/` is 940 GB because that tier has no separate `/tmp`, `/oradata/ora1`, `/oradata/ora2`, `/oradata/ora3`, or `/nokia`. Those cells are blank in Table 8, so the product, the database, and the data directory share the root filesystem. Small Plus, Medium, and Large split them onto their own filesystems, and `/` drops to 150 GB (170 GB on Large).
+
+`/nokia` is the TNMS data directory. The programs are installed at `/opt/nokia/tnms`. Traces, the SFTP tree, and the other runtime data go in `/nokia/tnms`. Nokia puts that filesystem on the second disk for Small Plus and above: 150 GB, 250 GB, then 800 GB. This procedure does not create that partition. `make` bind-mounts `/opt/tnms-data` on `/nokia`, so the same data lands on the one data disk.
+
+When those filesystems are separate, the data disk to order is 900 GB for Small Plus (300+300+150+150), 1700 GB for Medium, and 5400 GB for Large. Add swap, `/`, and `/tmp` when those sit on the OS disk.
+
+A Small machine in production needs approval from a TNMS Product Line Manager and only one mediator. Node Manager and eDNA are Medium or Large. A Medium machine that also runs Transcend Controller against this database needs 256 GB more in `ora2`. The FE Server and the Windows client do not change with the tier. Their sizes are in Table 3.
+
+The commands below do not build the Table 8 partitions. `make` accepts `/` of at least 8 GiB, `/tmp` of at least 16 GiB, one `/opt` volume of at least 100 GB, and a swap file of exactly 18 GiB. That 18 GiB file is what this procedure creates. It meets the Oracle installer check of 16 GB swap on the reference host. Nokia's Small Plus swap in Table 8 is 100 GB. A customer who will grow past this install orders the VM from the table. The steps on this page still create the smaller layout `make` checks.
 
 ## What TNMS requires
 
