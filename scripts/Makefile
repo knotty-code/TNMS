@@ -1207,8 +1207,14 @@ home_is_huge() {
 }
 
 swap_is_ready() {
-  swapon --show=NAME,SIZE --bytes --noheadings 2>/dev/null | awk -v n="/opt/swapfile" -v s="$$SWAP_BYTES" '
-    $$1 == n && $$2 == s { found = 1 }
+  local page usable
+  # swapon --bytes reports the usable size. mkswap keeps the first page
+  # for the header, so an 18 GiB file shows 4096 bytes less.
+  page=$$(getconf PAGESIZE 2>/dev/null || printf '%s\n' 4096)
+  [[ $$page =~ ^[0-9]+$$ ]] || page=4096
+  usable=$$((SWAP_BYTES - page))
+  swapon --show=NAME,SIZE --bytes --noheadings 2>/dev/null | awk -v n="/opt/swapfile" -v full="$$SWAP_BYTES" -v usable="$$usable" '
+    $$1 == n && ($$2 == full || $$2 == usable) { found = 1 }
     END { exit !found }
   '
 }
@@ -1335,7 +1341,7 @@ storage_ok() {
     bad=1
   fi
   if ! swap_is_ready; then
-    echo "storage: /opt/swapfile is not an $${SWAP_BYTES}-byte swap." >&2
+    echo "storage: /opt/swapfile is not an 18 GiB swap." >&2
     bad=1
   fi
   uuid=$$(blkid -s UUID -o value /dev/datavg/optlv 2>/dev/null || true)

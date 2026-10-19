@@ -89,7 +89,7 @@ systemctl daemon-reload
 
 ## 3. Create the 18 GiB swap file
 
-`make` does not create this file. The size is exact: 18 GiB, which is `18 * 1024^3` bytes. A different size fails the check.
+`make` does not create this file. The file size is exact: 18 GiB, which is `18 * 1024^3` bytes. `swapon --bytes` prints 4096 bytes less, because the swap header uses the first page. `make` accepts that reported size. A different file size fails the check.
 
 ```bash
 findmnt -n -o SOURCE,SIZE,TARGET /opt

@@ -135,7 +135,7 @@ Required before `stage` copies install files. `stage` creates the first three wh
 - `/nokia` is the bind from `/opt/tnms-data`. `/oradata` is the bind from `/opt/oradata`.
 - `/etc/fstab` has both bind lines.
 - `/opt`, `/opt/tnms-data`, and `/opt/oradata` are `usr_t`.
-- `/opt/swapfile` is the active swap and is exactly 18 GiB, `/etc/fstab` has that line, and the file is `swapfile_t`.
+- `/opt/swapfile` is the active swap and the file is exactly 18 GiB. `swapon --bytes` reports one page less. `/etc/fstab` has that line, and the file is `swapfile_t`.
 
 `stage` then copies the install files onto the mounted volume.
 
