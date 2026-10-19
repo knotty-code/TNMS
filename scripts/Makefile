@@ -270,8 +270,11 @@ kernel_ok() {
 
 on_data_disk() {
   local path=$$1 opt_src src
-  opt_src=$$(findmnt -n -o SOURCE /opt)
-  src=$$(findmnt -n -o SOURCE "$$path" 2>/dev/null || true)
+  # --target walks up to the filesystem that holds path. Without it,
+  # findmnt 2.32 only matches a path that is itself a mountpoint, so
+  # /opt/oracle looks missing even though it is on the /opt volume.
+  opt_src=$$(findmnt -n -o SOURCE --target /opt)
+  src=$$(findmnt -n -o SOURCE --target "$$path" 2>/dev/null || true)
   [[ "$$src" == "$$opt_src" || "$$src" == "$$opt_src"* ]]
 }
 
